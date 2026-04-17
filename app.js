@@ -47,7 +47,18 @@ const Log = (() => {
   function write(msg, type = 'info') {
     const el = document.createElement('div');
     el.className = `log-line ${type}`;
-    el.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-msg">${msg}</span>`;
+
+    const tsEl = document.createElement('span');
+    tsEl.className = 'log-ts';
+    tsEl.textContent = ts();
+
+    const msgEl = document.createElement('span');
+    msgEl.className = 'log-msg';
+    msgEl.textContent = msg;
+
+    el.appendChild(tsEl);
+    el.appendChild(msgEl);
+
     if (f()) { f().appendChild(el); f().scrollTop = f().scrollHeight; }
   }
   return { info: m=>write(m,'info'), ok: m=>write(m,'ok'), err: m=>write(m,'err'), warn: m=>write(m,'warn') };
