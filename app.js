@@ -32,7 +32,7 @@ const Settings = (() => {
     const s = { ...defaults };
     Object.keys(defaults).forEach(k => {
       const v = localStorage.getItem('lumina_' + k);
-      if (v !== null) s[k] = (isNaN(v) || k.startsWith('hc')) ? v : Number(v);
+      if (v !== null) s[k] = (typeof defaults[k] === 'number') ? Number(v) : v;
     });
     return s;
   }
