@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lumina | Jellyfish Smart Lamp Controller</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 20 C20 20 15 50 15 65 C25 65 30 75 35 65 C40 65 45 75 55 65 C60 65 65 75 75 65 C80 75 85 65 90 65 C90 45 80 20 50 20 Z' fill='%23bb99ff'></path><path d='M30 65 Q 25 90, 20 100 M50 65 Q 50 90, 50 100 M75 65 Q 80 90, 85 100' fill='none' stroke='%237fffd4' stroke-width='8' stroke-linecap='round'></path><circle cx='35' cy='50' r='6' fill='%23ffffff'/><circle cx='65' cy='50' r='6' fill='%23ffffff'/></svg>" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+</head>
+<body>
+
+  <div id="toast-container"></div>
+
+  <main class="split-layout">
+    
+    <!-- Left: Brand & Visualization -->
+    <section class="visual-pane">
+      <div class="brand-header">
+        <h1 class="brand-logotype">LUMINA</h1>
+        <div class="brand-tagline">A Smart Lamp by Team Hauers</div>
+      </div>
+      
+      <canvas id="jelly-canvas"></canvas>
+      
+      <div class="visual-footer">
+        <div class="status-indicator">
+          <span id="lamp-status-dot" class="dot"></span>
+          <span id="lamp-status-text">Connecting</span>
+        </div>
+      </div>
+
+      <div class="visual-footer right-dock">
+        <div class="global-weather-widget" id="global-weather-widget">
+           <div class="wd-bg-effect"></div>
+           <div class="gw-content">
+             <img id="gw-icon" class="weather-icon mini" src="https://openweathermap.org/img/wn/01d@2x.png" alt="Weather Icon" />
+             <span id="gw-temp">--°C</span>
+             <span class="gw-sep">•</span>
+             <span id="gw-feels">Feels --°C</span>
+             <span class="gw-sep">•</span>
+             <span id="gw-loc">No Data</span>
+           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Controls -->
+    <section class="control-pane">
+      
+      <header class="control-header">
+        <nav class="pill-tabs">
+          <button class="tab-btn active" data-page="page-lighting">Lighting</button>
+          <button class="tab-btn" data-page="page-automations">Automations</button>
+          <button class="tab-btn" data-page="page-system">System</button>
+          <button class="tab-btn" data-page="page-logs">Logs</button>
+          <button class="tab-btn" data-page="page-lab">Lab</button>
+        </nav>
+      </header>
+
+      <div class="control-content">
+        
+        <!-- =======================
+             PAGE: LIGHTING 
+             ======================= -->
+        <div class="page" id="page-lighting">
+          
+          <div class="section-group" style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+            <div>
+              <div class="section-header">
+                <h2>Power</h2>
+              </div>
+              <div class="pwr-controls">
+                <button class="btn-clean" id="btn-lamp-on">Turn On</button>
+                <button class="btn-ghost" id="btn-lamp-off">Turn Off</button>
+              </div>
+            </div>
+            <div style="margin-left: 18px;">
+               <div class="section-header">
+                 <h2>Get WLED</h2>
+               </div>
+               <a href="https://install.wled.me" target="_blank" class="external-link boxed-link" style="display: inline-flex; align-items: center; margin-top: 4px; line-height: 1.2;">
+                 <span>install.wled.me</span>
+                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+               </a>
+            </div>
+          </div>
+
+          <div class="section-group">
+            <div class="section-header">
+              <h2>Effect</h2>
+            </div>
+            
+            <div class="effect-picker-row">
+              <input type="color" id="color-picker" value="#6358ff" aria-label="Color" />
+              <div class="fx-scroll" id="fx-grid">
+                <!-- JS populated -->
+              </div>
+            </div>
+          </div>
+
+          <div class="section-group">
+            <div class="section-header">
+              <h2>Brightness</h2>
+              <span class="header-value" id="val-brightness">100</span>
+            </div>
+            <input type="range" class="flat-slider" id="sl-brightness" min="0" max="255" value="100" />
+            
+            <div class="section-header mt-4">
+              <h2>Pace</h2>
+              <span class="header-value" id="val-speed">128</span>
+            </div>
+            <input type="range" class="flat-slider" id="sl-speed" min="0" max="255" value="128" />
+            
+            <div class="section-header mt-4">
+              <h2>Intensity</h2>
+              <span class="header-value" id="val-intensity">128</span>
+            </div>
+            <input type="range" class="flat-slider" id="sl-intensity" min="0" max="255" value="128" />
+            
+            <button class="btn-solid block mt-6" id="btn-apply-light">Commit Changes</button>
+          </div>
+
+        </div>
+
+        <!-- =======================
+             PAGE: AUTOMATIONS 
+             ======================= -->
+        <div class="page hidden" id="page-automations">
+          
+          <div class="section-group">
+            <div class="section-header">
+              <h2>Weather Sync</h2>
+            </div>
+            <p class="helper-text">Lamp dynamically adjusts effect and color based on local heat index.</p>
+            
+            <div class="weather-dashboard" id="weather-board">
+              <div class="wd-bg-effect"></div>
+              <div class="weather-readout">
+                <div class="wr-icon-container">
+                   <img id="wd-icon" class="weather-icon lg" src="https://openweathermap.org/img/wn/01d@2x.png" alt="Weather Icon" />
+                </div>
+                <div class="wr-main-info">
+                  <div class="wr-temp-row">
+                    <span id="wd-temp" class="wr-temp">--</span>
+                  </div>
+                  <div id="wd-meta" class="sub">--</div>
+                </div>
+              </div>
+              <div class="heat-index-box">
+                <div class="hi-title">Current heat index</div>
+                <div id="wd-feels" class="hi-val">It feels --</div>
+              </div>
+              
+              <div class="light-mapping-indicator mt-4 mb-4">
+                 <div class="lmi-badge" id="wd-lmi-badge"></div>
+                 <div class="lmi-texts">
+                    <span class="lmi-status" id="wd-status">No data</span>
+                    <span class="lmi-label" id="wd-lmi-label">Pending Sync</span>
+                 </div>
+              </div>
+            </div>
+            
+            <div class="input-stack mt-4">
+              <div class="input-row">
+                <label>Active Location</label>
+                <div style="display: flex; gap: 8px; width: 60%; align-items: center;">
+                  <input type="text" id="loc-input" placeholder="Override default location" autocomplete="off" style="width: 100%; flex: 1;" />
+                  <button class="btn-ghost" id="btn-reset-loc" style="padding: 4px 10px; height: auto;" title="Switch back to default location">↺</button>
+                </div>
+              </div>
+              <div class="input-row">
+                <label>Sync Interval (min)</label>
+                <input type="number" id="set-weather-interval" min="1" max="1440" value="15" />
+              </div>
+              <div class="input-row">
+                <label>High Heat (≥35°)</label>
+                <div style="display: flex; gap: 8px;">
+                  <select id="fx-35" class="fx-select weather-fx" style="width:100px"></select>
+                  <input type="color" id="hc-35" value="#df4b4b" />
+                </div>
+              </div>
+              <div class="input-row">
+                <label>Warm Map (≥28°)</label>
+                <div style="display: flex; gap: 8px;">
+                  <select id="fx-28" class="fx-select weather-fx" style="width:100px"></select>
+                  <input type="color" id="hc-28" value="#da9228" />
+                </div>
+              </div>
+              <div class="input-row">
+                <label>Pleasant Map (≥22°)</label>
+                <div style="display: flex; gap: 8px;">
+                  <select id="fx-22" class="fx-select weather-fx" style="width:100px"></select>
+                  <input type="color" id="hc-22" value="#24b65a" />
+                </div>
+              </div>
+              <div class="input-row">
+                <label>Cool Map (&lt;22°)</label>
+                <div style="display: flex; gap: 8px;">
+                  <select id="fx-0" class="fx-select weather-fx" style="width:100px"></select>
+                  <input type="color" id="hc-0" value="#5d52f0" />
+                </div>
+              </div>
+            </div>
+            <button class="btn-clean block mt-4" id="btn-fetch-weather">Sync Now</button>
+          </div>
+
+          <div class="section-group">
+            <div class="section-header">
+              <h2>Hydration Reminder</h2>
+            </div>
+            <p class="helper-text">Flashes a blue ripple effect to remind you to drink water.</p>
+            
+            <div class="input-stack">
+              <div class="input-row">
+                <label>Effect / Color</label>
+                <div style="display: flex; gap: 8px;">
+                  <select id="water-fx" class="fx-select" style="width:100px"></select>
+                  <input type="color" id="water-color" value="#0078ff" />
+                </div>
+              </div>
+              <div class="input-row">
+                <label>Default Effect</label>
+                <div style="display: flex; gap: 8px;">
+                  <select id="water-default-fx" class="fx-select" style="width:100px"></select>
+                </div>
+              </div>
+              <div class="input-row">
+                <label>Interval (min)</label>
+                <input type="number" id="set-water-interval" min="1" max="1440" value="60" />
+              </div>
+              <div class="input-row">
+                <label>Duration (sec)</label>
+                <input type="number" id="set-water-duration" min="5" max="300" value="15" />
+              </div>
+            </div>
+            <button class="btn-clean block mt-4" id="btn-trigger-water">Trigger Reminder</button>
+          </div>
+
+        </div>
+
+        <!-- =======================
+             PAGE: LAB
+             ======================= -->
+        <div class="page hidden" id="page-lab">
+          <div class="section-group">
+            <div class="section-header">
+              <h2>Weather Presets</h2>
+            </div>
+            <p class="helper-text" style="margin-bottom: 12px;">Force global locations to preview UI/light effects.</p>
+              <div class="preset-grid" id="preset-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 16px;">
+                <button class="btn-ghost preset-btn" data-loc="Dubai, AE">Dubai</button>
+                <button class="btn-ghost preset-btn" data-loc="Cairo, EG">Cairo</button>
+                <button class="btn-ghost preset-btn" data-loc="Singapore, SG">Singapore</button>
+                <button class="btn-ghost preset-btn" data-loc="Mumbai, IN">Mumbai</button>
+                <button class="btn-ghost preset-btn" data-loc="Tokyo, JP">Tokyo</button>
+                <button class="btn-ghost preset-btn" data-loc="Seattle, US">Seattle</button>
+                <button class="btn-ghost preset-btn" data-loc="London, UK">London</button>
+                <button class="btn-ghost preset-btn" data-loc="Miami, US">Miami</button>
+                <button class="btn-ghost preset-btn" data-loc="Reykjavik, IS">Reykjavik</button>
+                <button class="btn-ghost preset-btn" data-loc="Moscow, RU">Moscow</button>
+                <button class="btn-ghost preset-btn" data-loc="Oslo, NO">Oslo</button>
+                <button class="btn-ghost preset-btn" data-loc="Honolulu, US">Honolulu</button>
+                <button class="btn-ghost preset-btn" data-loc="Phoenix, US">Phoenix</button>
+                <button class="btn-ghost preset-btn" data-loc="Manila, PH">Manila</button>
+                <button class="btn-ghost preset-btn" data-loc="Bangkok, TH">Bangkok</button>
+                <button class="btn-ghost preset-btn" data-loc="Vancouver, CA">Vancouver</button>
+                <button class="btn-ghost preset-btn" data-loc="Sydney, AU">Sydney</button>
+                <button class="btn-ghost preset-btn" data-loc="Johannesburg, ZA">Johannesburg</button>
+                <button class="btn-ghost preset-btn" data-loc="Sao Paulo, BR">Sao Paulo</button>
+                <button class="btn-ghost preset-btn" data-loc="Ulaanbaatar, MN">Ulaanbaatar</button>
+              </div>
+
+              <div class="input-row" style="margin-top: 16px;">
+                 <label>Add new preset city</label>
+                 <div style="display: flex; gap: 8px; align-items: center;">
+                   <input type="text" id="new-preset-loc" placeholder="e.g. Paris, FR" style="width: 100%; flex: 1;" autocomplete="off" />
+                   <button class="btn-clean" id="btn-add-preset" style="padding: 4px 12px; height: auto;">Add</button>
+                 </div>
+              </div>
+            </div>
+
+            <!-- More lab features for fun -->
+            <div class="section-group mt-4">
+              <div class="section-header">
+                <h2>Lumina Control Override</h2>
+              </div>
+              <p class="helper-text">Force Lumina character to state messages or act wildly.</p>
+              
+              <div class="input-row mt-4">
+                 <label>Force Speech Message</label>
+                 <div style="display: flex; gap: 8px; align-items: center;">
+                   <input type="text" id="lab-speech" placeholder="What should Lumina say?" style="width: 100%; flex: 1;" autocomplete="off" />
+                   <button class="btn-clean" id="btn-force-speech" style="padding: 4px 12px; height: auto;">Speak</button>
+                 </div>
+              </div>
+
+              <div class="input-row mt-4">
+                 <button class="btn-solid block" id="btn-party-mode">Trigger Rave/Party Mode</button>
+              </div>
+            </div>
+
+            <div class="section-group mt-4">
+              <div class="section-header">
+                <h2>WLED Presets</h2>
+              </div>
+              <p class="helper-text">Trigger custom Light Presets saved directly on your WLED hardware device.</p>
+              
+              <div class="input-row mt-4">
+                 <label>Load Device Preset (ID)</label>
+                 <div style="display: flex; gap: 8px; align-items: center;">
+                   <input type="number" id="lab-preset-id" min="1" max="250" placeholder="e.g. 1" style="width: 100%; flex: 1;" autocomplete="off" />
+                   <button class="btn-clean" id="btn-load-preset" style="padding: 4px 12px; height: auto;">Load</button>
+                 </div>
+              </div>
+            </div>
+
+            <div class="section-group mt-4">
+              <div class="section-header">
+                <h2>Local REST Access</h2>
+              </div>
+              <p class="helper-text">When hosted on HTTPS, browser security can block local HTTP device calls. Use this helper to view bypass steps.</p>
+              <button class="btn-solid block" id="btn-unlock-rest-mode">Unlock Local REST Mode (HTTPS Bypass)</button>
+            </div>
+          </div>
+
+        <!-- =======================
+             PAGE: SYSTEM 
+             ======================= -->
+        <div class="page hidden" id="page-system">
+          
+          <div class="section-group">
+            <div class="section-header">
+              <h2>Weather Settings</h2>
+            </div>
+            <div class="input-stack">
+              <div class="input-row">
+                <label>Default Location</label>
+                <input type="text" id="sys-loc-input" placeholder="Nabua, PH" autocomplete="off" />
+              </div>
+              <div class="input-row">
+                <label>OpenWeather API Key</label>
+                <div style="width: 60%; display: flex; flex-direction: column; align-items: flex-start;">
+                  <input type="text" id="sys-apikey-input" placeholder="OpenWeather Map Key" autocomplete="off" style="width: 100%;" />
+                  <a href="https://home.openweathermap.org/api_keys" target="_blank" class="external-link" style="display: inline-flex; align-items: center; margin-top: 16px; align-self: flex-end; justify-content: flex-end; text-align: right;">
+                    <span>Get OpenWeather API Key</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section-group">
+            <div class="section-header">
+              <h2>Connection Settings</h2>
+            </div>
+            
+            <div class="input-stack" style="margin-bottom: 24px;">
+              <div class="input-row" style="margin-bottom: 16px;">
+                <label style="font-size: 13px; color: var(--text-sec);">Startup Default</label>
+                <select id="sys-startup-mode">
+                  <option value="last">Remember Last Active</option>
+                  <option value="rest">Force REST (Local)</option>
+                  <option value="mqtt">Force MQTT (Cloud)</option>
+                </select>
+              </div>
+
+              <label style="font-size: 13px; color: var(--text-sec);">Active Mode</label>
+              <div class="mode-toggle-group" id="ui-comm-mode-group">
+                <label class="toggle-control">
+                  <input type="radio" name="comm-mode" value="rest" id="mode-rest" checked>
+                  <div class="toggle-btn">REST (Local)</div>
+                </label>
+                <label class="toggle-control">
+                  <input type="radio" name="comm-mode" value="mqtt" id="mode-mqtt">
+                  <div class="toggle-btn">MQTT (Cloud)</div>
+                </label>
+              </div>
+            </div>
+
+            <div class="input-stack" id="group-rest">
+              <div class="input-row">
+                <label>WLED IP</label>
+                <input type="text" id="ip-input" placeholder="http://10.36.19.212" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="input-stack hidden" id="group-mqtt">
+              <div class="input-row">
+                <label>Broker Address</label>
+                <input type="text" id="mqtt-broker" placeholder="broker.hivemq.com" autocomplete="off" />
+              </div>
+              <div class="input-row">
+                <label>WebSocket Port</label>
+                <input type="number" id="mqtt-port" placeholder="8000" autocomplete="off" />
+              </div>
+              <div class="input-row">
+                <label>Device Topic</label>
+                <input type="text" id="mqtt-topic" placeholder="wled/lumina/hauers2026" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="pwr-controls mt-4">
+              <button class="btn-clean" id="btn-save-settings">Save Config</button>
+              <button class="btn-ghost" id="btn-test-conn">Ping Target</button>
+            </div>
+          </div>
+
+          <div class="section-group">
+            <div class="section-header">
+              <h2>Timers</h2>
+            </div>
+            <div class="timer-plate">
+              <div class="tp-label">Weather Sync</div>
+              <div class="tp-val" id="timer-weather-cd">--:--</div>
+            </div>
+            <div class="timer-plate">
+              <div class="tp-label">Next Reminder</div>
+              <div class="tp-val" id="timer-water-cd">--:--</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- =======================
+             PAGE: LOGS
+             ======================= -->
+        <div class="page hidden" id="page-logs">
+          <div class="section-group">
+            <div class="section-header flex-between">
+              <h2>Event Log</h2>
+              <button class="link-btn" id="btn-clear-log">Clear</button>
+            </div>
+            <div id="log-feed"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="rest-modal-overlay hidden" id="rest-mode-modal" role="dialog" aria-modal="true" aria-labelledby="rest-mode-title">
+        <div class="rest-modal-card">
+          <div class="rest-modal-header">
+            <h3 id="rest-mode-title">Browser Mixed Content Block Detected</h3>
+            <button class="btn-ghost rest-modal-close" id="btn-close-rest-modal" aria-label="Close modal">Close</button>
+          </div>
+          <p class="rest-modal-subtext">Your app is served over HTTPS (for example on Vercel), but local WLED REST calls use HTTP. Most browsers block this by default as mixed content.</p>
+          <p class="rest-modal-note"><strong>When to use this:</strong> Use this only when accessing Lumina through a hosted/public URL (such as Vercel). If you are running on localhost/local network, this step is usually not required.</p>
+
+          <div class="rest-guide-grid">
+            <section class="rest-guide-column">
+              <h4>Desktop Guide</h4>
+              <ol>
+                <li>Click the <strong>View Site Information</strong> icon (lock or controls) beside the URL.</li>
+                <li>Open <strong>Site Settings</strong> and locate the <strong>Insecure Content</strong> permission.</li>
+                <li>Change it from <strong>Block</strong> to <strong>Allow</strong>, then refresh the page.</li>
+              </ol>
+            </section>
+
+            <section class="rest-guide-column">
+              <h4>Mobile Guide</h4>
+              <ol>
+                <li>Tap the browser site icon or menu near the address bar for site details.</li>
+                <li>Open <strong>Site Settings</strong> (or Permissions) and find <strong>Insecure Content</strong>.</li>
+                <li>Switch it to <strong>Allow</strong>, then reload the dashboard.</li>
+              </ol>
+            </section>
+          </div>
+
+          <div class="rest-modal-footer">
+            <button class="btn-clean" id="btn-close-rest-modal-footer">Close</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
