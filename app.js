@@ -269,7 +269,7 @@ const JellyfishRenderer = (() => {
   let w, h, t = 0;
   
   // Character active state
-  let msgObj = { text: '', alpha: 0, timer: 0 };
+  let msgObj = { text: '', alpha: 0, timer: 0, lines: [], longestLine: 0 };
   let blinkTimer = Math.random() * 200;
   let targetCyPct = 0.35; 
   let currentCyPct = 0.35; 
@@ -316,10 +316,20 @@ const JellyfishRenderer = (() => {
   let isDrinking = false;
   function setDrinking(val) { isDrinking = val; }
 
+  function updateSpeechCache() {
+    const s = Math.min(w, h) / 500;
+    const fontSize = 12 * s;
+    ctx.font = `500 ${fontSize}px Inter`;
+    const maxTextWidth = 160 * s;
+    msgObj.lines = getWrappedLines(msgObj.text, maxTextWidth);
+    msgObj.longestLine = msgObj.lines.length > 0 ? Math.max(...msgObj.lines.map(line => ctx.measureText(line).width)) : 0;
+  }
+
   function speak(text, duration = 4000) {
     msgObj.text = text;
     msgObj.alpha = 1.0;
-    msgObj.timer = duration / 16; 
+    msgObj.timer = duration / 16;
+    updateSpeechCache();
   }
 
   function roundRect(x, y, w, h, r) {
@@ -1175,10 +1185,9 @@ const JellyfishRenderer = (() => {
         ctx.font = `500 ${fontSize}px Inter`;
         const padding = 14 * s;
         const lineSpacing = 6 * s;
-        const maxTextWidth = 160 * s;
 
-        const lines = getWrappedLines(msgObj.text, maxTextWidth);
-        const longestLine = Math.max(...lines.map(line => ctx.measureText(line).width));
+        const lines = msgObj.lines;
+        const longestLine = msgObj.longestLine;
         
         const boxW = longestLine + padding * 2;
         const boxH = (lines.length * fontSize) + ((lines.length - 1) * lineSpacing) + (padding * 2);
@@ -1239,6 +1248,7 @@ const JellyfishRenderer = (() => {
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     ctx.scale(dpr, dpr);
+    updateSpeechCache();
   }
 
   function frame() {
