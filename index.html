@@ -4,11 +4,76 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lumina | Jellyfish Smart Lamp Controller</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 20 C20 20 15 50 15 65 C25 65 30 75 35 65 C40 65 45 75 55 65 C60 65 65 75 75 65 C80 75 85 65 90 65 C90 45 80 20 50 20 Z' fill='%23bb99ff'></path><path d='M30 65 Q 25 90, 20 100 M50 65 Q 50 90, 50 100 M75 65 Q 80 90, 85 100' fill='none' stroke='%237fffd4' stroke-width='8' stroke-linecap='round'></path><circle cx='35' cy='50' r='6' fill='%23ffffff'/><circle cx='65' cy='50' r='6' fill='%23ffffff'/></svg>" />
+  
+  <!-- Minified Glowing Jellyfish SVG Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 120'%3E%3Cdefs%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='2' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3ClinearGradient id='gr' x1='0%25' y1='0%25' x2='0%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ab77ff' /%3E%3Cstop offset='100%25' stop-color='%236bb3ff' /%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M 30 55 C 20 75, 45 95, 30 115 M 50 55 C 65 80, 35 100, 50 120 M 70 55 C 80 75, 55 95, 70 115' fill='none' stroke='%236bb3ff' stroke-width='3' stroke-linecap='round' filter='url(%23g)'/%3E%3Cpath d='M 40 55 C 30 80, 45 105, 40 120 M 60 55 C 70 80, 55 105, 60 120' fill='none' stroke='%23ab77ff' stroke-width='2' stroke-linecap='round' filter='url(%23g)'/%3E%3Cpath d='M 15 55 C 15 15, 85 15, 85 55 Q 70 48, 50 55 Q 30 48, 15 55 Z' fill='url(%23gr)' filter='url(%23g)'/%3E%3Ccircle cx='35' cy='40' r='4' fill='%23fff' opacity='0.8'/%3E%3Ccircle cx='65' cy='40' r='4' fill='%23fff' opacity='0.8'/%3E%3C/svg%3E" />
+  
+  <!-- Loader Styles (Loads First) -->
+  <link rel="stylesheet" href="loader.css" />
+  
+  <!-- Mobile Blocker Styles -->
+  <link rel="stylesheet" href="mobile-block.css" />
+  
+  <!-- App Styles -->
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
 </head>
 <body>
+
+  <!-- Mobile / Desktop Enforcement Overlay -->
+  <div class="mobile-block-overlay">
+    <svg class="mobile-block-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120">
+      <defs>
+        <filter id="mBlockGlow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <linearGradient id="mBlockGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#ab77ff"/><stop offset="100%" stop-color="#6bb3ff"/>
+        </linearGradient>
+      </defs>
+      <!-- Wavy Tentacles -->
+      <path d="M 30 55 C 20 75, 45 95, 30 115 M 50 55 C 65 80, 35 100, 50 120 M 70 55 C 80 75, 55 95, 70 115" fill="none" stroke="#6bb3ff" stroke-width="3" stroke-linecap="round" filter="url(#mBlockGlow)"/>
+      <path d="M 40 55 C 30 80, 45 105, 40 120 M 60 55 C 70 80, 55 105, 60 120" fill="none" stroke="#ab77ff" stroke-width="2" stroke-linecap="round" filter="url(#mBlockGlow)"/>
+      <!-- Bell -->
+      <path d="M 15 55 C 15 15, 85 15, 85 55 Q 70 48, 50 55 Q 30 48, 15 55 Z" fill="url(#mBlockGrad)" filter="url(#mBlockGlow)"/>
+      <circle cx="35" cy="40" r="4" fill="#ffffff" opacity="0.8"/>
+      <circle cx="65" cy="40" r="4" fill="#ffffff" opacity="0.8"/>
+    </svg>
+    <div class="mobile-block-title">DESKTOP REQUIRED</div>
+    <div class="mobile-block-text">Lumina's physics-simulated Digital Twin and real-time dashboard are engineered specifically for <span class="mobile-block-accent">desktop displays</span>.</div>
+    <div class="mobile-block-text" style="opacity: 0.7; margin-top: 1rem; font-size: 0.85rem;">Please switch to a laptop or desktop computer to access and control the system.</div>
+  </div>
+
+  <!-- Full-Screen Loader Overlay -->
+  <div id="lumina-loader" class="lumina-loader-overlay">
+    <!-- Inline glowing jellyfish SVG -->
+    <svg class="lumina-loader-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120">
+      <defs>
+        <filter id="loaderGlow">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+        <linearGradient id="loaderGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#ab77ff" />
+          <stop offset="100%" stop-color="#6bb3ff" />
+        </linearGradient>
+      </defs>
+      <!-- Wavy Tentacles -->
+      <path d="M 30 55 C 20 75, 45 95, 30 115 M 50 55 C 65 80, 35 100, 50 120 M 70 55 C 80 75, 55 95, 70 115" fill="none" stroke="#6bb3ff" stroke-width="3" stroke-linecap="round" filter="url(#loaderGlow)"/>
+      <path d="M 40 55 C 30 80, 45 105, 40 120 M 60 55 C 70 80, 55 105, 60 120" fill="none" stroke="#ab77ff" stroke-width="2" stroke-linecap="round" filter="url(#loaderGlow)"/>
+      <!-- Wider, smoother Bell -->
+      <path d="M 15 55 C 15 15, 85 15, 85 55 Q 70 48, 50 55 Q 30 48, 15 55 Z" fill="url(#loaderGrad)" filter="url(#loaderGlow)"/>
+      <!-- Eyes/Details -->
+      <circle cx="35" cy="40" r="4" fill="#ffffff" opacity="0.8"/>
+      <circle cx="65" cy="40" r="4" fill="#ffffff" opacity="0.8"/>
+    </svg>
+    <div class="lumina-loader-brand">LUMINA</div>
+    <div class="lumina-loader-text">Loading Assets & Preparing Environment...</div>
+    <div class="lumina-loader-bar">
+      <div class="lumina-loader-progress"></div>
+    </div>
+  </div>
 
   <div id="toast-container"></div>
 
@@ -78,7 +143,7 @@
                <div class="info-line"></div>
                <h3>What is Lumina?</h3>
             </div>
-            <p>Lumina is a next-generation smart lamp controller designed specifically for the Jellyfish series by Team Hauers. It provides a real-time bridge between atmospheric conditions and your home's lighting aesthetics.</p>
+            <p>Lumina bridges the gap between physical smart home hardware and interactive web experiences. It goes beyond a standard remote control by featuring a physics-simulated "Digital Twin" (our interactive web mascot) rendered on an HTML5 Canvas. This digital twin mirrors the physical ESP32 lamp's state, color, and effects in real-time, creating a seamless adaptive atmosphere.</p>
           </section>
           
           <section class="info-section mt-6">
@@ -86,7 +151,22 @@
                <div class="info-line"></div>
                <h3>How it Works</h3>
             </div>
-            <p>The system uses a WebSocket-based MQTT or REST interface to communicate with WLED-powered hardware. It features a physics-simulated mascot that visually reflects every state change of the physical lamp in real-time.</p>
+            <p>Lumina is engineered with a fault-tolerant, dual-communication bridge:</p>
+            <ul style="padding-left: 1.2rem; color: var(--text-sec); font-size: 13px; line-height: 1.5; margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+              <li><strong>Local Edge Control (REST API):</strong> When on the same Wi-Fi network, the app communicates directly with the physical lamp's WLED JSON API. This provides zero-latency, high-speed data transfer for rapid color syncing and animations.</li>
+              <li><strong>Global Cloud Control (MQTT):</strong> When the user leaves the local network, the app can be switched to a WebSockets-based MQTT protocol (via HiveMQ on port 8884). This allows the lamp to be controlled remotely from anywhere in the world.</li>
+            </ul>
+          </section>
+
+          <section class="info-section mt-6">
+            <div class="info-title-group">
+               <div class="info-line" style="background: var(--brand-accent);"></div>
+               <h3 style="color: var(--brand-accent);">System Limitations & Security Constraints</h3>
+            </div>
+            <div style="background: rgba(239, 68, 68, 0.05); border-left: 3px solid var(--brand-accent); padding: 12px; border-radius: 4px; margin-top: 12px; font-size: 12px; color: var(--text-sec); line-height: 1.5;">
+              <p>Modern web browsers enforce strict security policies (Mixed Content and CORS-RFC1918 Private Network Access). Because of this, a secure cloud-hosted website (<code>https://</code>) is physically blocked by the browser from sending unencrypted local requests to a home network IP (<code>http://10.x.x.x</code>).</p>
+              <p style="margin-top: 8px;">To bypass this browser security constraint and utilize the low-latency Local REST mode, this web dashboard must be deployed to an unencrypted HTTP host (like Surge) or run on a local development environment. MQTT Cloud mode, however, utilizes secure WebSockets (WSS) and functions universally.</p>
+            </div>
           </section>
   
           <section class="info-section mt-6">
@@ -94,12 +174,12 @@
                <div class="info-line"></div>
                <h3>Tech Stack</h3>
             </div>
-            <div class="tech-grid">
-              <span class="tech-tag">Paho MQTT</span>
-              <span class="tech-tag">WLED JSON API</span>
-              <span class="tech-tag">HTML5 Canvas</span>
-              <span class="tech-tag">Vanilla JS</span>
-            </div>
+            <ul style="padding-left: 1.2rem; color: var(--text-sec); font-size: 13px; line-height: 1.5; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; list-style-type: square;">
+              <li><strong>Frontend:</strong> Vanilla JavaScript, HTML5 Canvas, CSS Variables</li>
+              <li><strong>Hardware:</strong> ESP32 Microcontroller, WS2812B LEDs</li>
+              <li><strong>Firmware:</strong> WLED JSON API</li>
+              <li><strong>Networking:</strong> Paho MQTT, WebSockets, REST API</li>
+            </ul>
           </section>
   
           <section class="info-section mt-6">
@@ -429,6 +509,16 @@
                   </div>
                 </div>
               </div>
+              <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
+                <a href="https://kno.wled.ge/interfaces/json-api/" target="_blank" class="external-link" style="display: flex; align-items: center; font-size: 13px;">
+                  <span>WLED JSON API Documentation</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+                <a href="https://github.com/wled/WLED/wiki/List-of-effects-and-palettes" target="_blank" class="external-link" style="display: flex; align-items: center; font-size: 13px;">
+                  <span>List of Effects & Palettes</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+              </div>
             </div>
 
           </div>
@@ -552,6 +642,9 @@
 
   </main>
 
+  <script src="loader.js"></script>
+  <script src="weather-animations.js"></script>
+  <script src="party-mode-effects.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

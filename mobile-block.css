@@ -1,0 +1,67 @@
+/* mobile-block.css */
+
+.mobile-block-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #0b0c10; /* Match app dark theme */
+  z-index: 10000; /* Stay above everything, including the loader */
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.mobile-block-logo {
+  width: 80px;
+  height: 100px;
+  margin-bottom: 1.5rem;
+  opacity: 0.8;
+  filter: drop-shadow(0 0 10px rgba(107, 179, 255, 0.2));
+}
+
+.mobile-block-title {
+  font-family: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 2px;
+  margin-bottom: 1rem;
+}
+
+.mobile-block-text {
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: #8b92a5;
+  line-height: 1.6;
+  max-width: 400px;
+  margin-bottom: 0.5rem;
+}
+
+.mobile-block-accent {
+  color: #6bb3ff;
+  font-weight: 600;
+}
+
+/* Engage the mobile blocker for viewport widths under 1024px */
+@media screen and (max-width: 1024px) {
+  .mobile-block-overlay {
+    display: flex;
+  }
+  
+  /* Instantly hide the main application and loader so no logic runs behind the scenes */
+  body {
+    overflow: hidden;
+  }
+  
+  #lumina-loader,
+  main.split-layout,
+  #toast-container {
+    display: none !important;
+  }
+}

@@ -3,6 +3,7 @@
 /* ── WLED FX ──────────────────────────────────────────────── */
 const WLED_FX = [
   { id: 0,   name: 'Solid' },
+  { id: 1,   name: 'Blink' },
   { id: 2,   name: 'Breathe' },
   { id: 3,   name: 'Wipe' },
   { id: 9,   name: 'Colorloop' },
@@ -342,6 +343,7 @@ const JellyfishRenderer = (() => {
   let targetEyeOffsetY = 0;
   let eyeOffsetX = 0;
   let eyeOffsetY = 0;
+  let partyJitter = 0;
   let hasMouse = false;
 
   canvas.addEventListener('mousemove', (e) => {
@@ -351,6 +353,94 @@ const JellyfishRenderer = (() => {
     hasMouse = true;
   });
   canvas.addEventListener('mouseleave', () => { hasMouse = false; });
+
+  // Underwater Effect Status
+  let underwaterEndTime = 0;
+  let underwaterBubbles = [];
+  let underwaterCorals = [];
+  let underwaterGodRays = [];
+  let underwaterFish = [];
+
+  canvas.addEventListener('dblclick', () => {
+    const state = LampState.get();
+    if (state && state.on) {
+      underwaterEndTime = Date.now() + 10000;
+      underwaterBubbles = [];
+      underwaterCorals = [];
+      underwaterGodRays = [];
+      underwaterFish = [];
+
+      // Generate Bubbles
+      const numBubbles = Math.floor(Math.random() * 20) + 40;
+      for (let i = 0; i < numBubbles; i++) {
+        underwaterBubbles.push({
+          x: Math.random() * w,
+          y: h + 50 + Math.random() * 150, // Start below viewport
+          s: Math.random() * 3 + 1.5, // Size
+          v: Math.random() * 2 + 1.5, // Velocity
+          wobbleOffset: Math.random() * Math.PI * 2,
+          wobbleSpeed: Math.random() * 2 + 1
+        });
+      }
+
+      // Generate God Rays (deterministic for this click)
+      const numRays = 4;
+      for (let i = 0; i < numRays; i++) {
+        underwaterGodRays.push({
+          topX: Math.random() * w,
+          bottomXOffset: (Math.random() - 0.5) * w * 0.4,
+          speed: Math.random() * 0.4 + 0.2,
+          width: Math.random() * 60 + 30
+        });
+      }
+
+      // Generate Branching Seafloor Corals / Kelp
+      const numCorals = Math.floor(Math.random() * 5) + 7;
+      for (let i = 0; i < numCorals; i++) {
+        const height = h * (0.2 + Math.random() * 0.3);
+        const hasBranches = Math.random() > 0.3; // 70% chance to have branches
+        
+        const coral = {
+          x: (w * 0.05) + Math.random() * (w * 0.9),
+          baseY: h,
+          height: height,
+          segments: Math.floor(Math.random() * 3) + 4,
+          swaySpeed: Math.random() * 0.8 + 0.4,
+          swayOffset: Math.random() * Math.PI * 2,
+          color: `hsla(${180 + Math.random() * 120}, ${50 + Math.random() * 30}%, ${15 + Math.random() * 20}%, 1.0)`,
+          branches: []
+        };
+        
+        if (hasBranches) {
+           const numBranches = Math.floor(Math.random() * 3) + 1;
+           for(let j = 0; j < numBranches; j++) {
+              coral.branches.push({
+                 startYPct: 0.3 + Math.random() * 0.5,
+                 lengthPct: 0.3 + Math.random() * 0.4,
+                 angle: (Math.random() > 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.5),
+                 swayOffset: Math.random() * Math.PI * 2
+              });
+           }
+        }
+        underwaterCorals.push(coral);
+      }
+
+      // Generate small swimming fish
+      const numFishes = Math.floor(Math.random() * 8) + 5;
+      for (let i = 0; i < numFishes; i++) {
+         const fromLeft = Math.random() > 0.5;
+         underwaterFish.push({
+           x: fromLeft ? -50 - Math.random()*200 : w + 50 + Math.random()*200,
+           y: h * 0.2 + Math.random() * (h * 0.6),
+           dir: fromLeft ? 1 : -1,
+           speed: 1.0 + Math.random() * 2.0,
+           size: Math.random() * 8 + 4,
+           color: `hsla(${Math.random() * 360}, ${70 + Math.random() * 30}%, ${50 + Math.random() * 30}%, 0.8)`,
+           wobbleOffset: Math.random() * Math.PI * 2
+         });
+      }
+    }
+  });
 
   let isDrinking = false;
   function setDrinking(val) { isDrinking = val; }
@@ -374,6 +464,7 @@ const JellyfishRenderer = (() => {
     msgObj.text = text;
     msgObj.alpha = 1.0;
     msgObj.expires = Date.now() + duration; 
+    updateSpeechCache();
   }
 
   function roundRect(x, y, w, h, r) {
@@ -436,15 +527,31 @@ const JellyfishRenderer = (() => {
       currentCyPct += (targetCyPct - currentCyPct) * 0.05;
 
       const baseAmplitude = on ? 15 : 4; 
+      const bellW = 85 * s;
+      const bellH = 80 * s;
+      const tentacleLength = 220 * s;
       let bob = Math.sin(t * (on ? 0.8 : 0.4)) * baseAmplitude * s;
       
       // Crazy bobbing for party mode
       if (partyLevel > 0.01) {
+        const targetJitter = (Math.random() - 0.5) * 14 * s;
+        partyJitter += (targetJitter - partyJitter) * 0.22;
         bob += Math.sin(t * 12) * 10 * partyLevel * s;
-        bob += (Math.random() - 0.5) * 8 * partyLevel * s;
+        bob += partyJitter * partyLevel;
+      } else {
+        partyJitter *= 0.8;
       }
-      
-      const cy = (h * currentCyPct) + bob;
+
+      const rawCy = (h * currentCyPct) + bob;
+      let cy = rawCy;
+
+      // Keep mascot bounded only during intense party motion.
+      // For normal on/off transitions, preserve original smooth vertical travel.
+      if (on && partyLevel > 0.08) {
+        const minCy = bellH * 1.25;
+        const maxCy = Math.max(minCy + 1, h - tentacleLength - 24 * s);
+        cy = Math.max(minCy, Math.min(maxCy, rawCy));
+      }
 
       // Eye tracking calculations
       if (hasMouse && on) {
@@ -517,6 +624,9 @@ const JellyfishRenderer = (() => {
             r = Math.round(r + (255 - r) * ripPulse * 0.5);
             g = Math.round(g + (255 - g) * ripPulse * 0.5);
             b = Math.round(b + (255 - b) * ripPulse * 0.5);
+         } else if (fx === 1) { // Blink Bell — hard on/off
+            const blinkPulse = Math.floor(t * 2) % 2 === 0 ? 1 : 0;
+            if (blinkPulse === 0) { r=0; g=0; b=0; }
          }
       }
       
@@ -527,7 +637,9 @@ const JellyfishRenderer = (() => {
       let chaseOffset = -1;
 
       if (on) {
-        if (fx === 2) { // Breathe — slow global pulse
+        if (fx === 1) { // Blink — sharp on and off
+          effectMultiplier = Math.floor(t * 2) % 2 === 0 ? 1 : 0;
+        } else if (fx === 2) { // Breathe — slow global pulse
           effectMultiplier = 0.2 + 0.8 * ((Math.sin(t * 1.2) + 1) / 2);
         } else if (fx === 15) { // Ripple — tighter rapid pulse
           effectMultiplier = 0.4 + 0.6 * Math.abs(Math.sin(t * 3.5));
@@ -545,10 +657,6 @@ const JellyfishRenderer = (() => {
       }
 
       const alpha = 0.9 * effectMultiplier * brightnessFactor;
-
-      const bellW = 85 * s;
-      const bellH = 80 * s;
-      const tentacleLength = 220 * s;
 
       ctx.save();
       ctx.translate(cx, cy);
@@ -664,6 +772,10 @@ const JellyfishRenderer = (() => {
       // --- Thick LED Tentacles ---
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+      const activeWeatherState =
+        typeof WeatherFx !== 'undefined' && typeof WeatherFx.getActiveState === 'function'
+          ? WeatherFx.getActiveState()
+          : null;
 
       for (let i = 0; i < this.numTentacles; i++) {
         const pct = i / (this.numTentacles - 1); 
@@ -699,8 +811,17 @@ const JellyfishRenderer = (() => {
           let currentX = thRoot + waveX + (swimOffset * depthPct);
           let currentY = depthPct * thisLength;
 
-          // --- Sparkle Effect Animation for Mascot ---
-          if (on && fx === 32) {
+          // --- Blink/Sparkle Effect Animation for Mascot ---
+          if (on && fx === 1) { // Blink
+             const blinkPhase = Math.floor(t * 2) % 2;
+             if (blinkPhase === 1) {
+                const h = (t * 60 + i * 20) % 360;
+                ctx.fillStyle = `hsla(${h}, 80%, 60%, ${alpha * 0.8})`;
+                ctx.beginPath();
+                ctx.arc(currentX, currentY, 4 * s, 0, Math.PI * 2);
+                ctx.fill();
+             }
+          } else if (on && fx === 32) { // Sparkle
              const sparklePhase = (t * 12 + i * 5 + j * 0.5) % 8; // Faster cycle for more energy
              if (sparklePhase < 2) {
                 const sparkleAlpha = (1.2 - Math.abs(1.0 - sparklePhase)) * alpha;
@@ -717,21 +838,32 @@ const JellyfishRenderer = (() => {
              }
           }
 
-          if (isDrinking && isCupArm && on) {
-             const cupBob = Math.sin(t * 3) * 6 * s;
-             const cupTargetX = -bellW * 1.8;
-             const cupTargetY = bellH * 1.2;
-             
+          const useCupArm = isCupArm && on && (isDrinking || activeWeatherState === 'heat');
+          if (useCupArm) {
+             let holdTargetX = -bellW * 1.8;
+             let holdTargetY = bellH * 1.2 + Math.sin(t * 3) * 6 * s;
+
+             if (
+               !isDrinking &&
+               activeWeatherState === 'heat' &&
+               typeof WeatherFx !== 'undefined' &&
+               typeof WeatherFx.getFanHoldPoint === 'function'
+             ) {
+               const hold = WeatherFx.getFanHoldPoint(t, s, bellW, bellH);
+               holdTargetX = hold.x;
+               holdTargetY = hold.y;
+             }
+
              // Smooth bezier curve for a pronounced V-shape hanging elbow bend
-             const cpX = -bellW * 1.2; 
+             const cpX = -bellW * 1.2;
              const cpY = bellH * 3.5;
-             
-             const pct = depthPct;
-             const invPct = 1 - pct;
-             let baseX = (invPct * invPct * thRoot) + (2 * invPct * pct * cpX) + (pct * pct * cupTargetX);
-             let baseY = (invPct * invPct * 0)      + (2 * invPct * pct * cpY) + (pct * pct * (cupTargetY + cupBob));
-             
-             // Wiggle the arm organically while holding the cup
+
+             const armPct = depthPct;
+             const invPct = 1 - armPct;
+             let baseX = (invPct * invPct * thRoot) + (2 * invPct * armPct * cpX) + (armPct * armPct * holdTargetX);
+             let baseY = (invPct * invPct * 0) + (2 * invPct * armPct * cpY) + (armPct * armPct * holdTargetY);
+
+             // Wiggle the arm organically while holding the accessory
              const wiggleMask = Math.sin(depthPct * Math.PI);
              const armWiggleX = Math.sin(t * 4 - depthPct * 5) * 15 * s * wiggleMask;
              const armWiggleY = Math.cos(t * 4 - depthPct * 5) * 10 * s * wiggleMask;
@@ -786,6 +918,9 @@ const JellyfishRenderer = (() => {
                 ledAlpha = 0.12 * brightnessFactor;
               }
             }
+          } else if (on && fx === 1) { // Blink — sharp on/off per segment
+             const segBlink = (Math.floor(t * 2) + i + j) % 2 === 0 ? 1 : 0.1;
+             ledAlpha = segBlink * brightnessFactor;
           } else if (on && fx === 32) {
              // Sparkle background: near black so the vibrant sparks pop
              ledAlpha = 0.04 * brightnessFactor;
@@ -1306,10 +1441,16 @@ const JellyfishRenderer = (() => {
         // Expressive Eyes
         let blinkScale = 1.0;
         let emotion = 'normal';
+        const hotWeatherActive =
+         typeof WeatherFx !== 'undefined' &&
+         typeof WeatherFx.getActiveState === 'function' &&
+         WeatherFx.getActiveState() === 'heat';
 
         if (isBlinking) {
            blinkScale = 0.1; 
            emotion = 'blink';
+        } else if (hotWeatherActive) {
+           emotion = 'sweaty';
         } else if (isDrinking) {
            emotion = 'drinking'; 
         } else if (msgObj.alpha > 0.1) {
@@ -1328,6 +1469,16 @@ const JellyfishRenderer = (() => {
         } else if (emotion === 'confused') {
            ctx.beginPath(); ctx.ellipse(eyeDrawXLeft, eyeDrawY, 6*s, 10*s, 0, 0, Math.PI*2); ctx.fill();
            ctx.beginPath(); ctx.ellipse(eyeDrawXRight, eyeDrawY, 4*s, 4*s, 0, 0, Math.PI*2); ctx.fill(); // one small eye
+        } else if (emotion === 'sweaty') {
+            // Tired, droopy eyes for hot weather (not angry)
+            ctx.beginPath();
+            ctx.moveTo(eyeDrawXLeft - 7*s, eyeDrawY - 1*s);
+            ctx.quadraticCurveTo(eyeDrawXLeft, eyeDrawY + 3*s, eyeDrawXLeft + 7*s, eyeDrawY - 1*s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(eyeDrawXRight - 7*s, eyeDrawY - 1*s);
+            ctx.quadraticCurveTo(eyeDrawXRight, eyeDrawY + 3*s, eyeDrawXRight + 7*s, eyeDrawY - 1*s);
+            ctx.stroke();
         } else {
            ctx.beginPath(); ctx.ellipse(eyeDrawXLeft, eyeDrawY, 6*s, 10*s * Math.max(blinkScale, 0.1), 0, 0, Math.PI*2); ctx.fill();
            ctx.beginPath(); ctx.ellipse(eyeDrawXRight, eyeDrawY, 6*s, 10*s * Math.max(blinkScale, 0.1), 0, 0, Math.PI*2); ctx.fill();
@@ -1358,6 +1509,13 @@ const JellyfishRenderer = (() => {
            ctx.quadraticCurveTo(mouthCx + 4*s, mouthCy - 6*s, mouthCx + 8*s, mouthCy);
            ctx.lineWidth = 2.5*s;
            ctx.stroke();
+        } else if (emotion === 'sweaty') {
+            // Simple tired mouth for hot weather
+            ctx.beginPath();
+            ctx.moveTo(0 + eyeOffsetX - 4*s, eyeDrawY + 18*s);
+            ctx.lineTo(0 + eyeOffsetX + 4*s, eyeDrawY + 18*s);
+            ctx.lineWidth = 2.3*s;
+            ctx.stroke();
         } else if (emotion === 'drinking') {
            // Small sipping 'o' mouth
            const sipBob = Math.sin(t * 8) * 2 * s;
@@ -1451,6 +1609,11 @@ const JellyfishRenderer = (() => {
         ctx.globalAlpha = 1.0;
       }
 
+      // Draw external weather accessories on top of mascot
+      if (typeof WeatherFx !== 'undefined') {
+          WeatherFx.drawAccessories(ctx, t, s, 0, eyeDrawY, eyeOffsetX, eyeOffsetY, { bellW, bellH, eyeSpacing });
+      }
+
       ctx.restore();
     }
   }
@@ -1471,6 +1634,188 @@ const JellyfishRenderer = (() => {
   function frame() {
     t += 0.016;
     ctx.clearRect(0,0,w,h);
+
+    if (typeof PartyFx !== 'undefined') {
+      PartyFx.drawBackground(ctx, t, w, h);
+    }
+    
+    // Calculate global scale standard for rendering elements proportionally
+    const s = Math.min(w, h) / 500;
+    
+    // --- Underwater Effect ---
+    const now = Date.now();
+    if (now < underwaterEndTime) {
+      const remaining = underwaterEndTime - now;
+      let effectAlpha = 1.0;
+      if (remaining < 2000) effectAlpha = remaining / 2000;
+      else if (remaining > 9000) effectAlpha = (10000 - remaining) / 1000;
+      
+      ctx.save();
+      ctx.globalAlpha = effectAlpha;
+      
+      // Deep sea gradient background
+      const grad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.max(w,h));
+      grad.addColorStop(0, 'rgba(8, 25, 45, 0.4)');
+      grad.addColorStop(1, 'rgba(2, 6, 12, 0.8)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      
+      // Light rays (god rays) from top sweeping
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = 'rgba(100, 200, 255, 0.05)';
+      ctx.beginPath();
+      for (let ray of underwaterGodRays) {
+        const topSweep = Math.sin(t * ray.speed) * 100;
+        const botSweep = Math.cos(t * ray.speed * 0.8) * 120;
+        
+        ctx.moveTo(ray.topX + topSweep - ray.width/2, 0);
+        ctx.lineTo(ray.topX + topSweep + ray.width/2, 0);
+        ctx.lineTo(ray.topX + botSweep + ray.bottomXOffset + ray.width, h);
+        ctx.lineTo(ray.topX + botSweep + ray.bottomXOffset - ray.width, h);
+      }
+      ctx.fill();
+
+      // Fish swimming across
+      ctx.globalCompositeOperation = 'source-over';
+      for (let f of underwaterFish) {
+         ctx.fillStyle = f.color;
+         f.x += f.speed * f.dir;
+         
+         const fishY = f.y + Math.sin(t * 2 + f.wobbleOffset) * 10 * s;
+         const tipX = f.x + (f.size * 2 * f.dir) * s;
+         const tailX = f.x - (f.size * 1.5 * f.dir) * s;
+         
+         ctx.beginPath();
+         // Fish body (simple tear shape)
+         ctx.moveTo(tipX, fishY);
+         ctx.quadraticCurveTo(f.x, fishY - f.size*s, tailX, fishY);
+         ctx.quadraticCurveTo(f.x, fishY + f.size*s, tipX, fishY);
+         ctx.fill();
+         
+         // Fish Tail fin
+         const tailWag = Math.sin(t * 8 + f.wobbleOffset) * 4 * s;
+         ctx.beginPath();
+         ctx.moveTo(tailX, fishY);
+         ctx.lineTo(tailX - (f.size * f.dir * 1.2)*s, fishY - f.size*s + tailWag);
+         ctx.lineTo(tailX - (f.size * f.dir * 1.2)*s, fishY + f.size*s + tailWag);
+         ctx.fill();
+      }
+
+      // Deep Sea Floor / Terrain Backdrop (3 Layers now for depth)
+      ctx.globalCompositeOperation = 'source-over';
+      
+      // Layer 1: Darkest, furthest back mound
+      ctx.fillStyle = 'rgba(2, 8, 16, 0.9)';
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      ctx.lineTo(0, h - h * 0.12);
+      ctx.quadraticCurveTo(w * 0.2, h - h * 0.25, w * 0.45, h - h * 0.12);
+      ctx.quadraticCurveTo(w * 0.7, h, w, h - h * 0.18);
+      ctx.lineTo(w, h);
+      ctx.fill();
+
+      // Layer 2: Mid-ground dark navy mounds
+      ctx.fillStyle = 'rgba(6, 18, 32, 0.8)';
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      ctx.lineTo(0, h - h * 0.08);
+      ctx.quadraticCurveTo(w * 0.35, h - h * 0.18, w * 0.6, h - h * 0.06);
+      ctx.quadraticCurveTo(w * 0.85, h - h * 0.12, w, h - h * 0.05);
+      ctx.lineTo(w, h);
+      ctx.fill();
+      
+      // Layer 3: Foreground teal-tinged mounds
+      ctx.fillStyle = 'rgba(12, 30, 50, 0.9)';
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      ctx.lineTo(0, h - h * 0.03);
+      ctx.bezierCurveTo(w * 0.2, h, w * 0.4, h - h * 0.12, w * 0.7, h - h * 0.04);
+      ctx.quadraticCurveTo(w * 0.9, h, w, h - h * 0.08);
+      ctx.lineTo(w, h);
+      ctx.fill();
+
+      // Branching Seafloor Corals / Kelp
+      for (let c of underwaterCorals) {
+        ctx.beginPath();
+        const segH = c.height / c.segments;
+        ctx.moveTo(c.x, c.baseY);
+        let currX = c.x;
+        let currY = c.baseY;
+        
+        let pathPoints = [{x: currX, y: currY}];
+        
+        for (let i = 1; i <= c.segments; i++) {
+           const sway = Math.sin(t * c.swaySpeed + c.swayOffset + i * 0.5) * 12 * (i/c.segments);
+           const nextX = c.x + sway;
+           const nextY = c.baseY - (i * segH);
+           
+           ctx.quadraticCurveTo(currX, currY - segH/2, nextX, nextY);
+           pathPoints.push({x: nextX, y: nextY});
+           
+           currX = nextX;
+           currY = nextY;
+        }
+
+        ctx.strokeStyle = c.color;
+        ctx.lineWidth = 12 * s;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+        
+        // Draw branches if this coral has them
+        if (c.branches && c.branches.length > 0) {
+           for (let br of c.branches) {
+               // Find branch start point based on path
+               const startIdx = Math.floor(br.startYPct * c.segments);
+               const pt = pathPoints[Math.min(startIdx, pathPoints.length-1)];
+               
+               ctx.beginPath();
+               ctx.moveTo(pt.x, pt.y);
+               
+               const branchLen = c.height * br.lengthPct;
+               const sway = Math.sin(t * c.swaySpeed + br.swayOffset) * 8;
+               
+               const endX = pt.x + Math.sin(br.angle) * branchLen + sway;
+               const endY = pt.y - Math.cos(br.angle) * branchLen;
+               
+               ctx.quadraticCurveTo(pt.x + Math.sin(br.angle) * (branchLen*0.5), pt.y - Math.cos(br.angle) * (branchLen*0.5), endX, endY);
+               
+               ctx.lineWidth = 8 * s;
+               ctx.stroke();
+           }
+        }
+        
+        // Inner highlight for the main stalk
+        ctx.beginPath();
+        ctx.moveTo(pathPoints[0].x, pathPoints[0].y);
+        for(let i=1; i<pathPoints.length; i++) {
+            ctx.quadraticCurveTo(pathPoints[i-1].x, pathPoints[i-1].y - segH/2, pathPoints[i].x, pathPoints[i].y);
+        }
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 3 * s;
+        ctx.stroke();
+      }
+      
+      // Rising bubbles
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      for (let b of underwaterBubbles) {
+        b.y -= b.v;
+        const xOffset = Math.sin(t * b.wobbleSpeed + b.wobbleOffset) * 8;
+        
+        ctx.beginPath();
+        ctx.arc(b.x + xOffset, b.y, b.s, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // respawn at bottom if hit top
+        if (b.y < -10) {
+          b.y = h + Math.random() * 20;
+          b.x = Math.random() * w;
+        }
+      }
+      ctx.restore();
+    }
+    
     jelly.draw();
     requestAnimationFrame(frame);
   }
@@ -1525,6 +1870,27 @@ const WeatherApi = (() => {
       const t = data.main.temp, f = data.main.feels_like;
       const c = THRESHOLDS.find(x => f >= x.min) || THRESHOLDS[3];
       const wMain = data.weather[0]?.main || 'Clear';
+      
+      if (typeof WeatherFx !== 'undefined') {
+         const weatherMain = String(wMain || '').toLowerCase();
+         let weatherAnimState = 'pleasant';
+
+         // Use actual weather condition first to avoid conflicting visuals.
+         if (weatherMain === 'rain' || weatherMain === 'drizzle' || weatherMain === 'thunderstorm') {
+           weatherAnimState = 'rain';
+         } else if (weatherMain === 'snow') {
+           weatherAnimState = 'cool';
+         } else if (c.l === 'High Heat') {
+           weatherAnimState = 'heat';
+         } else if (c.l === 'Warm') {
+           weatherAnimState = 'warm';
+         } else if (c.l === 'Cool') {
+           weatherAnimState = 'cool';
+         }
+
+         WeatherFx.setWeatherState(weatherAnimState, 8000);
+      }
+      
       const iconCode = data.weather[0]?.icon || '01d';
       
       let modeStr = wMain.toLowerCase();
@@ -1689,12 +2055,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if (s.startupMode === 'rest') s.commMode = 'rest';
   else if (s.startupMode === 'mqtt') s.commMode = 'mqtt';
   
-  try { 
-    WledApi.init(s, { source: 'startup' }); 
-  } catch(e) { 
-    console.error("WledApi INIT CRASH:", e);
-    setTimeout(() => Log.err('System Error: ' + e.message), 1000); 
-  }
+  // Pause networking until loader is done. The loader explicitly triggers 'lumina-loader-complete'
+  window.addEventListener('lumina-loader-complete', () => {
+    try { 
+      WledApi.init(s, { source: 'startup' }); 
+    } catch(e) { 
+      console.error("WledApi INIT CRASH:", e);
+      setTimeout(() => Log.err('System Error: ' + e.message), 1000); 
+    }
+  });
 
   // Populate FX selects
   const opts = WLED_FX.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
@@ -1905,8 +2274,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('btn-party-mode')?.addEventListener('click', () => {
+    const partyDurationMs = 11200;
     JellyfishRenderer.speak("RAVE MODE ACTIVATED! WOOOO!", 4000);
     JellyfishRenderer.setParty(true);
+    if (typeof PartyFx !== 'undefined') PartyFx.start(partyDurationMs);
     let count = 0;
     const colors = [[255,0,0], [0,255,0], [0,0,255], [255,255,0], [255,0,255], [0,255,255]];
     const iv = setInterval(() => {
