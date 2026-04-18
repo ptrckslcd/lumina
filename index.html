@@ -160,6 +160,56 @@
 
           <section class="info-section mt-6">
             <div class="info-title-group">
+               <div class="info-line"></div>
+               <h3>Connect Your ESP32 Lamp</h3>
+            </div>
+            <p>Quick setup path to pair your physical lamp with this web app:</p>
+            <ol style="padding-left: 1.2rem; color: var(--text-sec); font-size: 13px; line-height: 1.6; margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+              <li><strong>Flash WLED firmware:</strong> Install WLED to your ESP32 using <a href="https://install.wled.me" target="_blank" class="external-link">install.wled.me</a>.</li>
+              <li><strong>Wire hardware correctly:</strong> Connect LED data to your ESP32 data pin, use a stable 5V supply for LEDs, and make sure ESP32 ground and LED ground are shared.</li>
+              <li><strong>Join Wi-Fi:</strong> Configure WLED on your 2.4GHz network and note the device IP shown in WLED (example: <code>http://192.168.1.120</code>).</li>
+              <li><strong>Use REST for local control:</strong> In <strong>System</strong> tab, choose <strong>REST (Local)</strong>, set <strong>WLED IP</strong>, then click <strong>Ping Target</strong> and <strong>Save Config</strong>.</li>
+              <li><strong>Use MQTT for remote control (optional):</strong> Set broker/topic in WLED Sync settings and mirror the same values in Lumina <strong>System</strong> tab under <strong>MQTT (Cloud)</strong>.</li>
+            </ol>
+
+            <div style="background: rgba(36, 182, 90, 0.05); border-left: 3px solid var(--green); padding: 12px; border-radius: 4px; margin-top: 12px; font-size: 12px; color: var(--text-sec); line-height: 1.5;">
+              <p><strong>Things to know:</strong> REST mode requires your dashboard and ESP32 to be on the same network. If local REST fails from a secure host, it is usually due to browser mixed-content/private-network restrictions. MQTT mode is the fallback for cross-network control.</p>
+              <p style="margin-top: 8px;"><strong>Quick test:</strong> Open <code>http://YOUR_WLED_IP/json/state</code> in your browser. If it loads JSON, the lamp is reachable and Lumina can control it.</p>
+            </div>
+          </section>
+
+          <section class="info-section mt-6">
+            <div class="info-title-group">
+               <div class="info-line"></div>
+               <h3>What to Do Next (App Basics)</h3>
+            </div>
+            <p>After hardware connection, complete this quick first-run setup:</p>
+
+            <ol style="padding-left: 1.2rem; color: var(--text-sec); font-size: 13px; line-height: 1.6; margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+              <li><strong>OpenWeather API key:</strong> Go to <a href="https://home.openweathermap.org/api_keys" target="_blank" class="external-link">OpenWeather API Keys</a>, copy your key, then paste it in <strong>System → Weather Settings → OpenWeather API Key</strong>.</li>
+              <li><strong>Set default city:</strong> In <strong>System → Default Location</strong>, enter your city format (example: <code>Nabua, PH</code>), then click <strong>Save Config</strong>.</li>
+              <li><strong>Choose Active Mode:</strong> In <strong>System → Active Mode</strong>, select <strong>REST (Local)</strong> for same-network control, or <strong>MQTT (Cloud)</strong> for remote control.</li>
+              <li><strong>Verify connection:</strong> Click <strong>Ping Target</strong>. When status turns online, your app and lamp are linked.</li>
+              <li><strong>Run first weather sync:</strong> Go to <strong>Automations</strong> and click <strong>Sync Now</strong> to test weather-to-light mapping.</li>
+            </ol>
+
+            <div style="background: rgba(93, 82, 240, 0.08); border-left: 3px solid var(--accent); padding: 12px; border-radius: 4px; margin-top: 12px; font-size: 12px; color: var(--text-sec); line-height: 1.55;">
+              <p><strong>How Active Mode switching works:</strong></p>
+              <ul style="padding-left: 1rem; margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+                <li><strong>REST (Local):</strong> Uses your WLED IP directly. Fastest response. Requires same local network.</li>
+                <li><strong>MQTT (Cloud):</strong> Uses broker/topic values. Best for remote access or strict browser network policies.</li>
+                <li><strong>Startup Default:</strong> Choose whether Lumina remembers last mode or forces REST/MQTT at boot.</li>
+                <li><strong>When switching modes:</strong> Lumina reinitializes communication automatically. Use Ping to confirm active path.</li>
+              </ul>
+            </div>
+
+            <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+              <strong>Tab quick guide:</strong> <strong>Lighting</strong> = manual effects, <strong>Automations</strong> = weather/hydration behaviors, <strong>System</strong> = network and API config, <strong>Lab</strong> = testing and advanced payload overrides.
+            </div>
+          </section>
+
+          <section class="info-section mt-6">
+            <div class="info-title-group">
                <div class="info-line" style="background: var(--brand-accent);"></div>
                <h3 style="color: var(--brand-accent);">System Limitations & Security Constraints</h3>
             </div>
