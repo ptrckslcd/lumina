@@ -1,0 +1,98 @@
+/* Guided Onboarding Overlay */
+.lumina-onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 3200;
+  pointer-events: none;
+}
+
+.lumina-onboarding.hidden {
+  display: none;
+}
+
+.lumina-onboarding-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(circle at 20% 10%, rgba(93, 82, 240, 0.08), transparent 35%),
+              rgba(4, 4, 7, 0.42);
+}
+
+.lumina-onboarding-card {
+  position: fixed;
+  z-index: 2;
+  width: min(370px, calc(100vw - 28px));
+  background: linear-gradient(180deg, rgba(18, 18, 23, 0.98) 0%, rgba(11, 11, 14, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(93, 82, 240, 0.2);
+  padding: 16px;
+  color: var(--text-primary);
+  pointer-events: auto;
+}
+
+.lumina-onboarding-kicker {
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+  font-size: 11px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.lumina-onboarding-title {
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.lumina-onboarding-body {
+  margin: 10px 0 0;
+  color: var(--text-sec);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.lumina-onboarding-progress {
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.lumina-onboarding-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lumina-onboarding-actions .btn-clean,
+.lumina-onboarding-actions .btn-ghost {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.lumina-onboarding-actions [data-ob="skip"] {
+  margin-left: auto;
+}
+
+.lumina-onboarding-focus {
+  position: relative;
+  z-index: 1 !important;
+  outline: 1px solid rgba(255, 255, 255, 0.65);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 3px rgba(93, 82, 240, 0.32), 0 10px 24px rgba(14, 11, 40, 0.24);
+  border-radius: 8px;
+  pointer-events: none;
+  transition: box-shadow 0.2s ease;
+}
+
+#btn-start-onboarding {
+  margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .lumina-onboarding-card {
+    width: calc(100vw - 24px);
+  }
+}

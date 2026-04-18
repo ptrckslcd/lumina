@@ -1,76 +1,117 @@
-# Lumina - Interactive WLED Companion UI
+# 🪼 Project Lumina — Interactive WLED Companion UI
 
-Lumina is a highly visual, interactive web interface for controlling your WLED devices. It features an animated interactive Jellyfish companion, live weather condition syncing, hydration reminders, and complete control over your WLED light effects.
+Lumina is a highly visual, interactive web-based interface designed to be the ultimate companion for your WLED smart lighting devices. Developed as an Internet of Things (IoT) Capstone Project by Team Hauers, it moves beyond standard remote control dashboards by blending utility with personality. Lumina features a physics-simulated "Digital Twin"—an animated jellyfish companion rendered on an HTML5 canvas that reacts to your routines, live weather data, and wellness reminders, seamlessly bridging the gap between your digital screen and physical environment.
 
-## 🌟 Overview
-This project is built using purely client-side technologies (HTML, CSS, Vanilla JavaScript). It communicates directly with your WLED device via **RESTful API** or **MQTT** and pulls weather data to sync lighting settings dynamically based on local temperature and conditions.
+--------------------------------------------------------------------------------
 
-## ✨ Features
-- **Interactive Companion:** A virtual animated jellyfish that reacts to your routines.
-- **WLED Control:** Easily pick effects, colors, and configure brightness, speed, and intensity.
-- **Live Weather Integration:** Custom backgrounds and lighting mapping based on your real-time local weather.
-- **Hydration Reminders:** Automated sequence to remind you to drink water at configurable intervals.
-- **Dual Connect Modes:** Connects to WLED over the local network via REST or remotely using an MQTT broker.
+## ✨ Key Features
 
----
+### 🐙 Interactive Digital Twin
+A virtual, animated jellyfish entity lives within the UI, featuring smooth interpolation and procedural animation. This mascot reacts dynamically to changes in your physical lamp's state, acting as a visual representation of your lighting ecosystem.
 
-##  How to Run Locally
+### 🌈 Curated WLED Control
+Lumina provides full control over your lighting's primary and secondary colors, brightness, speed, and intensity. To maintain a specific adaptive atmosphere aesthetic, the application currently supports a curated selection of WLED's built-in effects (such as Pacifica and Aurora) rather than the entire 100+ effect library.
 
-If you've downloaded the repository or cloned it from GitHub to your computer, you have a few simple options to start the application.
+### ☁️ Real-Time Weather Syncing
+The application automatically pulls local weather data via the OpenWeatherMap API to update the UI background. It maps specific lighting presets to match your current climate, such as cool blues for rain or warm yellows for sunny conditions.
 
-### Option 1: Direct File Open
-Since the project is completely client-side, the easiest way is:
-1. Extract the downloaded folder.
-2. Double-click the `index.html` file to open it in your default browser.
+### 💧 Hydration & Wellness Reminders
+Lumina includes a built-in scheduler that triggers specific ambient lighting sequences and mascot dialogue to remind you to drink water at configurable intervals.
 
-### Option 2: Run a Local Server
-A local web server provides a more stable experience (especially for fetching resources and avoiding `file://` CORS restrictions):
-- **Using Node.js:** Open a terminal in the folder and run:
-  ```bash
-  npx serve .
-  ```
-- **Using Python:** Open a terminal in the folder and run:
-  ```bash
-  python -m http.server 8000
-  ```
-- **VS Code:** Install the "Live Server" extension, right-click `index.html`, and select "Open with Live Server".
+### 🔌 Fault-Tolerant Hybrid Connectivity
+Users can seamlessly switch between two modes of operation:
+- Local REST API: For zero-latency home network control.
+- WebSockets-based MQTT: For global remote management.
 
----
+### 🧪 Developer Lab Tools
+For advanced users, the interface includes experimental features such as a Raw JSON Payload Injector for testing custom WLED commands and a Morse Code visual flasher.
 
-## 💡 WLED Configuration Setup
+--------------------------------------------------------------------------------
 
-To make WLED listen to this app, you must configure a few settings in your WLED web interface.
+## 🛠️ Technology Stack & Architecture
 
-### If using REST Mode (Local Network)
-Go to **Config** > **Security & Updates** in WLED and make sure **CORS (Cross-Origin Resource Sharing)** is allowed. This allows your Vercel-hosted website to send commands to your local WLED IP address. 
+Lumina is built as a purely client-side application (Static Site), ensuring privacy, rapid loading times, and ease of deployment.
 
-### If using MQTT Mode
-1. Go to **Config** > **Sync Interfaces**.
-2. Scroll to the **MQTT** section.
-3. Enable MQTT.
-4. Enter your broker details (If you use the default public broker in the app, use `broker.hivemq.com` and the port depending on your WebSocket support, typically `8000`).
-5. Set the "Device Topic" to match what you configured in Lumina's settings (e.g., `wled/lumina/hauers2026`).
-6. *Note: As a browser-based application, Lumina must connect using **MQTT over WebSockets**. Regular TCP MQTT connections (like port `1883`) will not work.*
+- Frontend: Vanilla JavaScript (ES6+), HTML5 Canvas Engine, and CSS3 featuring a Glassmorphism UI.
+- State Management: Utilizes the browser's native localStorage to persist user settings, API keys, and UI preferences across sessions without the need for a backend database.
+- External Integrations: Powered by the OpenWeatherMap API for live atmospheric data parsing.
+- Connectivity Protocols:
+  - RESTful HTTP: Direct edge-network communication via /json/state for high-speed local control.
+  - MQTT over WebSockets: Remote cloud control capability utilizing Eclipse Paho MQTT.
 
----
+--------------------------------------------------------------------------------
 
-## ⛅ Getting your Weather API Key
+## 📁 Repository Structure
 
-This app fetches weather from OpenWeatherMap (or your configured weather provider).
-1. Go to [OpenWeatherMap](https://openweathermap.org/).
-2. Create a free account.
-3. Go to the **API keys** section in your dashboard.
-4. Generate a new key.
-5. Paste this key into the **Lumina Web UI Settings** (Not the code!).
-*Note: New keys can take up to 10-15 minutes to become active.*
+The project consists of the following core files:
 
----
+| File | Description |
+| --- | --- |
+| index.html | The main entry point and UI structure. |
+| app.js | Core application logic and state management. |
+| weather-animations.js | Logic for dynamic backgrounds and weather-based lighting. |
+| party-mode-effects.js | Specialized lighting sequences for high-energy environments. |
+| fakeLamp.js | A utility for simulating WLED hardware during development. |
+| loader.js / loader.css | Visual assets for the initial application loading sequence. |
+| style.css | Primary Glassmorphism styling. |
+| mobile-block.css | Constraints and styling for mobile device responsiveness. |
 
-## ⚠️ Limitations & Good to Know
+--------------------------------------------------------------------------------
 
-- **HTTPS vs HTTP (Browser Security):** If you host this on a secure platform (like Vercel or GitHub Pages under `https://`), your browser will block direct REST communication to a local WLED device (`http://`) due to "Mixed Content" security rules.
-  - *Workarounds:* Use **MQTT Mode**, click the padlock icon in your browser URL bar to explicitly "Allow insecure content" for the site, or simply run the HTML file locally on your computer instead of hosting it online.
-- **Background Tab Throttling:** Because the hydration scheduler and weather fetching rely on browser JavaScript, modern browsers may pause or slow down the timers if the Lumina tab is inactive or minimized. For accurate timers, keep the tab visible or run it on a dedicated display.
-- **Single Device Control:** The interface is currently designed to interact with and manage one WLED instance at a time.
-- **Local Device Storage:** All of your configurations (IP addresses, UI preferences, and API keys) are saved in your browser's `localStorage`. They do not sync across different devices. If you clear your browser cache, you will need to re-enter your settings.
-- **MQTT WebSockets:** Because this is a web application, it must connect to MQTT via **WebSockets** (commonly port `8000`, `8083`, or `9001`). It cannot connect via standard bare TCP MQTT (port `1883`).
+## 🚀 Getting Started
+
+### Prerequisites
+
+- A microcontroller (for example ESP32/ESP8266) running WLED v0.12 or higher.
+- A modern web browser (Chrome, Firefox, Edge, or Safari).
+- Optional: An OpenWeatherMap API key for weather syncing features.
+
+### How to Run Locally
+
+Because Lumina is a pure frontend app, you can run it in several ways.
+
+#### Option 1: Local Web Server (Recommended)
+To avoid strict file:// CORS restrictions, serve the folder locally:
+
+- Node.js: Run npx serve . in the project directory.
+- Python: Run python -m http.server 8000 in the project directory.
+- VS Code: Install the Live Server extension, right-click index.html, and select Open with Live Server.
+
+#### Option 2: Direct File Open
+Extract the folder and double-click index.html to open it in your default browser.
+
+--------------------------------------------------------------------------------
+
+## ⚙️ Configuration Setup
+
+### 1. WLED REST Configuration (Local Network)
+In your WLED web interface, navigate to Config > Security & Updates and ensure CORS (Cross-Origin Resource Sharing) is allowed. This is required if the app is hosted on a platform like Vercel or GitHub Pages to allow commands to be sent to your local IP.
+
+### 2. MQTT Configuration (Remote Control)
+Navigate to Config > Sync Interfaces > MQTT in WLED.
+
+- Enable MQTT and enter your broker details (for example broker.hivemq.com).
+- Set the Device Topic to match your Lumina settings (for example wled/lumina/hauers2026).
+- Note: Lumina must connect using MQTT over WebSockets (typically port 8000, 8083, or 9001). Standard TCP MQTT (port 1883) is unsupported by web browsers.
+
+### 3. Weather API Key
+
+- Register for a free account at OpenWeatherMap.
+- Generate a new API key from your dashboard.
+- Paste this key into the Lumina Web UI Settings menu (not the source code).
+- New keys may take 10-15 minutes to activate.
+
+--------------------------------------------------------------------------------
+
+## ⚠️ Limitations & Security
+
+- HTTPS vs HTTP (Mixed Content): If Lumina is hosted on a secure https:// platform, browsers will block REST commands to local http:// WLED devices. To fix this, use MQTT Mode, click the browser padlock icon to allow insecure content, or run the app locally.
+- Background Throttling: Modern browsers may pause timers for the hydration scheduler or weather fetching if the Lumina tab is inactive or minimized.
+- Single Device: The interface is currently designed to manage one WLED instance at a time.
+- Local Storage: All configurations are saved in your browser's localStorage. These settings do not sync across different devices and will be lost if you clear your browser cache.
+
+--------------------------------------------------------------------------------
+
+## 👨‍💻 Developed By
+
+Team Hauers — IoT Capstone Project.

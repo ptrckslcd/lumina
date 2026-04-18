@@ -16,6 +16,7 @@
   
   <!-- App Styles -->
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="onboarding.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
 </head>
 <body>
@@ -144,6 +145,7 @@
                <h3>What is Lumina?</h3>
             </div>
             <p>Lumina bridges the gap between physical smart home hardware and interactive web experiences. It goes beyond a standard remote control by featuring a physics-simulated "Digital Twin" (our interactive web mascot) rendered on an HTML5 Canvas. This digital twin mirrors the physical ESP32 lamp's state, color, and effects in real-time, creating a seamless adaptive atmosphere.</p>
+            <button class="btn-clean" id="btn-start-onboarding" type="button">Start Guided Onboarding</button>
           </section>
           
           <section class="info-section mt-6">
@@ -214,8 +216,13 @@
                <h3 style="color: var(--brand-accent);">System Limitations & Security Constraints</h3>
             </div>
             <div style="background: rgba(239, 68, 68, 0.05); border-left: 3px solid var(--brand-accent); padding: 12px; border-radius: 4px; margin-top: 12px; font-size: 12px; color: var(--text-sec); line-height: 1.5;">
-              <p>Modern web browsers enforce strict security policies (Mixed Content and CORS-RFC1918 Private Network Access). Because of this, a secure cloud-hosted website (<code>https://</code>) is physically blocked by the browser from sending unencrypted local requests to a home network IP (<code>http://10.x.x.x</code>).</p>
-              <p style="margin-top: 8px;">To bypass this browser security constraint and utilize the low-latency Local REST mode, this web dashboard must be deployed to an unencrypted HTTP host (like Surge) or run on a local development environment. MQTT Cloud mode, however, utilizes secure WebSockets (WSS) and functions universally.</p>
+              <ul style="padding-left: 1rem; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+                <li><strong>Curated Effect Library:</strong> Lumina intentionally maps and supports only a specific subset of WLED effects to preserve its distinct visual atmosphere.</li>
+                <li><strong>HTTPS Security (Mixed Content):</strong> Modern browsers enforce strict Private Network Access rules. Hosting Lumina on a secure <code>https://</code> site (like Vercel or standard GitHub Pages) will block REST commands to local <code>http://10.x.x.x</code> WLED targets. Use local run, unencrypted <code>http://</code> hosting (for example Surge), or MQTT mode.</li>
+                <li><strong>Tab Throttling:</strong> Browsers (especially Chrome) throttle <code>setInterval</code> and <code>requestAnimationFrame</code> when a tab is minimized or in the background. Keep Lumina visible for accurate hydration timers and smooth canvas rendering.</li>
+                <li><strong>Device Limit:</strong> The current architecture maps the Digital Twin to one WLED instance at a time.</li>
+                <li><strong>Persistence:</strong> Settings are stored locally in your browser. Clearing site data/cache resets configured IP addresses, preferences, and API keys.</li>
+              </ul>
             </div>
           </section>
   
@@ -695,6 +702,7 @@
   <script src="loader.js"></script>
   <script src="weather-animations.js"></script>
   <script src="party-mode-effects.js"></script>
+  <script src="onboarding.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
