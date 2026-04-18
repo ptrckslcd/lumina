@@ -33,7 +33,7 @@ const Settings = (() => {
     const s = { ...defaults };
     Object.keys(defaults).forEach(k => {
       const v = localStorage.getItem('lumina_' + k);
-      if (v !== null) s[k] = (isNaN(v) || k.startsWith('hc')) ? v : Number(v);
+      if (v !== null) s[k] = (typeof defaults[k] === 'number') ? Number(v) : v;
     });
     return s;
   }
@@ -60,7 +60,18 @@ const Log = (() => {
   function write(msg, type = 'info') {
     const el = document.createElement('div');
     el.className = `log-line ${type}`;
-    el.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-msg">${msg}</span>`;
+
+    const tsEl = document.createElement('span');
+    tsEl.className = 'log-ts';
+    tsEl.textContent = ts();
+
+    const msgEl = document.createElement('span');
+    msgEl.className = 'log-msg';
+    msgEl.textContent = msg;
+
+    el.appendChild(tsEl);
+    el.appendChild(msgEl);
+
     if (f()) { f().appendChild(el); f().scrollTop = f().scrollHeight; }
   }
   return { info: m=>write(m,'info'), ok: m=>write(m,'ok'), err: m=>write(m,'err'), warn: m=>write(m,'warn') };
@@ -343,6 +354,15 @@ const JellyfishRenderer = (() => {
 
   let isDrinking = false;
   function setDrinking(val) { isDrinking = val; }
+
+  function updateSpeechCache() {
+    const s = Math.min(w, h) / 500;
+    const fontSize = 12 * s;
+    ctx.font = `500 ${fontSize}px Inter`;
+    const maxTextWidth = 160 * s;
+    msgObj.lines = getWrappedLines(msgObj.text, maxTextWidth);
+    msgObj.longestLine = msgObj.lines.length > 0 ? Math.max(...msgObj.lines.map(line => ctx.measureText(line).width)) : 0;
+  }
 
   function speak(text, duration = 4000) {
     if (!text) {
@@ -1382,10 +1402,9 @@ const JellyfishRenderer = (() => {
         ctx.font = `500 ${fontSize}px Inter`;
         const padding = 14 * s;
         const lineSpacing = 6 * s;
-        const maxTextWidth = 160 * s;
 
-        const lines = getWrappedLines(msgObj.text, maxTextWidth);
-        const longestLine = Math.max(...lines.map(line => ctx.measureText(line).width));
+        const lines = msgObj.lines;
+        const longestLine = msgObj.longestLine;
         
         const boxW = longestLine + padding * 2;
         const boxH = (lines.length * fontSize) + ((lines.length - 1) * lineSpacing) + (padding * 2);
@@ -1446,6 +1465,7 @@ const JellyfishRenderer = (() => {
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     ctx.scale(dpr, dpr);
+    updateSpeechCache();
   }
 
   function frame() {
