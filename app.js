@@ -15,7 +15,8 @@ const WLED_FX = [
   { id: 64,  name: 'Plasmawave' },
   { id: 72,  name: 'Aurora' },
   { id: 76,  name: 'Running' },
-  { id: 101, name: 'Pacifica' }
+  { id: 101, name: 'Pacifica' },
+  { id: 32,  name: 'Sparkle' }
 ];
 
 /* ── Settings ─────────────────────────────────────────────── */
@@ -37,7 +38,19 @@ const Settings = (() => {
     return s;
   }
   function save(obj) { Object.entries(obj).forEach(([k, v]) => localStorage.setItem('lumina_' + k, v)); }
-  return { load, save };
+  function resetEffects() {
+    const s = load();
+    const defaultsOnly = {
+      weatherInterval: 15, waterInterval: 60, waterDuration: 15,
+      waterFx: 15, waterColor: '#0078ff', waterReturnFx: 0,
+      hc35: '#df4b4b', hc28: '#da9228', hc22: '#24b65a', hc0: '#5d52f0',
+      fx35: 0, fx28: 0, fx22: 0, fx0: 0
+    };
+    Object.assign(s, defaultsOnly);
+    save(s);
+    return s;
+  }
+  return { load, save, resetEffects };
 })();
 
 /* ── Utilities: Log & Toast ───────────────────────────────── */
@@ -64,14 +77,14 @@ function showToast(msg) {
 
 /* ── WLED API & STATE ─────────────────────────────────────── */
 const LampState = (() => {
-  let cfg = { color: [99,88,255], fx: 0, bri: 100, on: false };
+  let cfg = { color: [99,88,255], fx: 0, bri: 128, on: false };
   function set(c, f, b, o) {
-    if(c) cfg.color = c; 
+    if(c) cfg.color = [...c]; 
     if(f!==undefined) cfg.fx = f; 
     if(b!==undefined) cfg.bri = b;
     if(o!==undefined) cfg.on = o;
   }
-  function get() { return cfg; }
+  function get() { return { ...cfg, color: [...cfg.color] }; }
   return { set, get };
 })();
 
@@ -89,10 +102,23 @@ const WledApi = (() => {
   }
 
   function init(settings, options = {}) {
-    s = settings;
+    const source = options.source || 'startup';
+    
+    // If saving settings, only rebuild connection if critical network parameters actually changed
+    if (source === 'settings-save' && s) {
+      const sameMode = s.commMode === settings.commMode;
+      const sameMqtt = s.mqttBroker === settings.mqttBroker && s.mqttPort === settings.mqttPort && s.mqttTopic === settings.mqttTopic;
+      const sameRest = s.wledIp === settings.wledIp;
+      
+      if (sameMode && ((settings.commMode === 'mqtt' && sameMqtt) || (settings.commMode === 'rest' && sameRest))) {
+        s = { ...settings }; // Just update config silently
+        return;
+      }
+    }
+
+    s = { ...settings };
     const initEpoch = ++modeEpoch;
     ConnStatus.setMode(s.commMode);
-    const source = options.source || 'startup';
     if(mqttClient) { try { mqttClient.disconnect(); } catch(e){} mqttClient = null; }
     
     if (s.commMode === 'mqtt') {
@@ -115,6 +141,7 @@ const WledApi = (() => {
           ConnStatus.set('ok');
           if (source === 'startup') {
             JellyfishRenderer.speak('Auto-connected via MQTT.');
+            syncToHardware();
           } else if (source === 'manual-switch') {
             JellyfishRenderer.speak('Switched to MQTT. Connected!');
           }
@@ -135,11 +162,23 @@ const WledApi = (() => {
         if (!isRequestCurrent('rest', initEpoch)) return;
         if (source === 'startup') {
           JellyfishRenderer.speak(ok ? 'Auto-connected via REST.' : 'REST auto-connect failed.');
+          if (ok) syncToHardware();
         } else if (source === 'manual-switch') {
           JellyfishRenderer.speak(ok ? 'Switched to REST. Connected!' : 'Local node unreachable.');
         }
       });
     }
+  }
+
+  function syncToHardware() {
+    const s = Settings.load(); // Reload to get freshest config if needed
+    const def = LampState.get();
+    // Force a known state to hardware + mascot to ensure 1:1 sync on boot
+    const col = getEffectColors(def.fx, def.color);
+    sendState({ on: true, bri: def.bri, seg:[{id:0, fx: def.fx, col: col}], tt: 10 });
+    LampState.set(def.color, def.fx, def.bri, true);
+    Log.ok('State Sync: Hardware and Mascot are now synchronized.');
+    console.log("[Lumina] Startup Sync complete.");
   }
 
   async function sendState(payload) {
@@ -258,7 +297,7 @@ const JellyfishRenderer = (() => {
   let w, h, t = 0;
   
   // Character active state
-  let msgObj = { text: '', alpha: 0, timer: 0 };
+  let msgObj = { text: '', alpha: 0, expires: 0 };
   let blinkTimer = Math.random() * 200;
   let targetCyPct = 0.35; 
   let currentCyPct = 0.35; 
@@ -306,9 +345,15 @@ const JellyfishRenderer = (() => {
   function setDrinking(val) { isDrinking = val; }
 
   function speak(text, duration = 4000) {
+    if (!text) {
+      msgObj.text = '';
+      msgObj.expires = 0;
+      msgObj.alpha = 0;
+      return;
+    }
     msgObj.text = text;
     msgObj.alpha = 1.0;
-    msgObj.timer = duration / 16; 
+    msgObj.expires = Date.now() + duration; 
   }
 
   function roundRect(x, y, w, h, r) {
@@ -342,9 +387,24 @@ const JellyfishRenderer = (() => {
   }
 
   class LEDCompanion {
-    constructor() { this.numTentacles = 7; this.segmentsPerTentacle = 25; }
+    constructor() { 
+      this.numTentacles = 7; 
+      this.segmentsPerTentacle = 25; 
+      this.isDrinking = false;
+      this.drinkingLevel = 0;
+      this.isParty = false;
+      this.partyLevel = 0;
+    }
+
+    setDrinking(val) { this.isDrinking = val; }
+    setParty(val) { this.isParty = val; }
 
     draw() {
+      // Smooth interpolation for modes
+      this.drinkingLevel += (this.isDrinking ? 1.0 : 0.0 - this.drinkingLevel) * 0.1;
+      this.partyLevel += (this.isParty ? 1.0 : 0.0 - this.partyLevel) * 0.08;
+      const partyLevel = this.partyLevel; // Local shortcut for easier use below
+
       const { color, fx, bri, on } = LampState.get();
       const s = Math.min(w, h) / 500;
       const cx = w * 0.5;
@@ -356,7 +416,14 @@ const JellyfishRenderer = (() => {
       currentCyPct += (targetCyPct - currentCyPct) * 0.05;
 
       const baseAmplitude = on ? 15 : 4; 
-      const bob = Math.sin(t * (on ? 0.8 : 0.4)) * baseAmplitude * s;
+      let bob = Math.sin(t * (on ? 0.8 : 0.4)) * baseAmplitude * s;
+      
+      // Crazy bobbing for party mode
+      if (partyLevel > 0.01) {
+        bob += Math.sin(t * 12) * 10 * partyLevel * s;
+        bob += (Math.random() - 0.5) * 8 * partyLevel * s;
+      }
+      
       const cy = (h * currentCyPct) + bob;
 
       // Eye tracking calculations
@@ -381,8 +448,8 @@ const JellyfishRenderer = (() => {
       
       // Override primary colors for dynamic effects
       if (on) {
-         if (fx === 9 || fx === 11) { // Rainbow / Colorloop Bell
-            const hue = (t * 20) % 360;
+         if (fx === 11) { // Rainbow Bell — slow smooth full-spectrum rotation
+            const hue = (t * 15) % 360;
             const C = 255;
             const X = Math.round(C * (1 - Math.abs(((hue/60) % 2) - 1)));
             if(hue < 60) { r=C; g=X; b=0; }
@@ -391,17 +458,28 @@ const JellyfishRenderer = (() => {
             else if(hue < 240) { r=0; g=X; b=C; }
             else if(hue < 300) { r=X; g=0; b=C; }
             else { r=C; g=0; b=X; }
+         } else if (fx === 9) { // Colorloop Bell — fast pulsing color blocks
+            const hue = (t * 45) % 360;
+            const blockHue = Math.floor(hue / 60) * 60; // snap to 6 color blocks
+            const C = 255;
+            const X = Math.round(C * (1 - Math.abs(((blockHue/60) % 2) - 1)));
+            if(blockHue < 60) { r=C; g=X; b=0; }
+            else if(blockHue < 120) { r=X; g=C; b=0; }
+            else if(blockHue < 180) { r=0; g=C; b=X; }
+            else if(blockHue < 240) { r=0; g=X; b=C; }
+            else if(blockHue < 300) { r=X; g=0; b=C; }
+            else { r=C; g=0; b=X; }
          } else if (fx === 101) { // Pacifica Bell
             const pct = (Math.sin(t*0.5) + 1) / 2;
             r = Math.round(62*(1-pct) + 0*pct);
             g = Math.round(229*(1-pct) + 130*pct);
             b = Math.round(153*(1-pct) + 200*pct);
-         } else if (fx === 64) { // Plasmawave Bell
+         } else if (fx === 64) { // Plasmawave Bell — red and blue
             const val = (Math.sin(t*0.8) + 1)/2;
             r = Math.round(255*val);
             g = 0;
             b = Math.round(255*(1-val));
-         } else if (fx === 72) { // Aurora Bell
+         } else if (fx === 72) { // Aurora Bell — green to purple
             const hue = 120 + ((Math.sin(t*0.3) + 1)/2) * 160; 
             const C = 255;
             const X = Math.round(C * (1 - Math.abs(((hue/60) % 2) - 1)));
@@ -409,6 +487,16 @@ const JellyfishRenderer = (() => {
             else if(hue < 240) { r=0; g=X; b=C; }
             else if(hue < 300) { r=X; g=0; b=C; }
             else { r=C; g=0; b=X; }
+         } else if (fx === 2) { // Breathe Bell — slow pulse of user color
+            const pulse = 0.3 + 0.7 * ((Math.sin(t * 1.2) + 1) / 2);
+            r = Math.round(r * pulse);
+            g = Math.round(g * pulse);
+            b = Math.round(b * pulse);
+         } else if (fx === 15) { // Ripple Bell — brief bright flash expanding
+            const ripPulse = Math.max(0, Math.sin(t * 4));
+            r = Math.round(r + (255 - r) * ripPulse * 0.5);
+            g = Math.round(g + (255 - g) * ripPulse * 0.5);
+            b = Math.round(b + (255 - b) * ripPulse * 0.5);
          }
       }
       
@@ -419,10 +507,18 @@ const JellyfishRenderer = (() => {
       let chaseOffset = -1;
 
       if (on) {
-        if (fx === 2 || fx === 15) { 
-          effectMultiplier = 0.3 + 0.7 * Math.abs(Math.sin(t * 1.5));
-        } else if (fx === 25 || fx === 28 || fx === 76 || fx === 3) {
-          chaseOffset = (t * 18) % this.segmentsPerTentacle; 
+        if (fx === 2) { // Breathe — slow global pulse
+          effectMultiplier = 0.2 + 0.8 * ((Math.sin(t * 1.2) + 1) / 2);
+        } else if (fx === 15) { // Ripple — tighter rapid pulse
+          effectMultiplier = 0.4 + 0.6 * Math.abs(Math.sin(t * 3.5));
+        } else if (fx === 25) { // Chase — lit group chases down
+          chaseOffset = (t * 14) % this.segmentsPerTentacle;
+        } else if (fx === 28) { // Comet — fast bright head with trail
+          chaseOffset = (t * 24) % this.segmentsPerTentacle;
+        } else if (fx === 76) { // Running — staggered wave per tentacle
+          chaseOffset = (t * 16) % this.segmentsPerTentacle;
+        } else if (fx === 3) { // Wipe — color reveal sweeping down
+          chaseOffset = -2; // special marker for wipe
         }
       } else {
         effectMultiplier = 0.6 + 0.4 * Math.sin(t * 0.6);
@@ -456,7 +552,11 @@ const JellyfishRenderer = (() => {
       for (let i = 0; i < numClothTentacles; i++) {
         const pct = i / (numClothTentacles - 1 || 1);
         const startX = (pct - 0.5) * bellW * 1.2;
-        const phase = t * 1.2 + i * 2.0;
+        let phase = t * 1.2 + i * 2.0;
+
+        if (partyLevel > 0.01) {
+           phase += t * 10 * partyLevel; // Go fast!
+        }
 
         ctx.beginPath();
         ctx.moveTo(startX, 0);
@@ -504,7 +604,12 @@ const JellyfishRenderer = (() => {
       for (let i = 0; i < numCurlyTentacles; i++) {
         const pct = i / (numCurlyTentacles - 1);
         const startX = (pct - 0.5) * bellW * 1.5;
-        const phase = t * 0.8 + i * 1.5;
+        let phase = t * 0.8 + i * 1.5;
+
+        if (partyLevel > 0.01) {
+           phase += t * 8 * partyLevel; // Curl dance!
+        }
+
         const curlTightness = 8 + (i % 3) * 4; 
         const isLightPurple = i % 2 === 0;
 
@@ -544,7 +649,12 @@ const JellyfishRenderer = (() => {
         const pct = i / (this.numTentacles - 1); 
         const thRoot = (pct - 0.5) * bellW * 1.5;
         
-        const phase = t * (on ? 1.2 : 0.3) + i * 0.8;
+        let phase = t * (on ? 1.2 : 0.3) + i * 0.8;
+        
+        if (partyLevel > 0.01) {
+           phase += t * 15 * partyLevel; // Raving LEDs!
+        }
+        
         const swimOffset = Math.sin(t * (on ? 1.0 : 0.5)) * (on ? 15 : 5) * s;
 
         let pX = thRoot;
@@ -568,6 +678,24 @@ const JellyfishRenderer = (() => {
 
           let currentX = thRoot + waveX + (swimOffset * depthPct);
           let currentY = depthPct * thisLength;
+
+          // --- Sparkle Effect Animation for Mascot ---
+          if (on && fx === 32) {
+             const sparklePhase = (t * 12 + i * 5 + j * 0.5) % 8; // Faster cycle for more energy
+             if (sparklePhase < 2) {
+                const sparkleAlpha = (1.2 - Math.abs(1.0 - sparklePhase)) * alpha;
+                // Vibrant Random-ish color based on time and position
+                const h = (t * 150 + i * 60 + j * 30) % 360; 
+                ctx.fillStyle = `hsla(${h}, 100%, 80%, ${sparkleAlpha})`;
+                ctx.beginPath();
+                // Bigger, more glowing sparks
+                ctx.shadowBlur = 10 * s;
+                ctx.shadowColor = `hsla(${h}, 100%, 80%, ${sparkleAlpha})`;
+                ctx.arc(currentX, currentY, 5 * s, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+             }
+          }
 
           if (isDrinking && isCupArm && on) {
              const cupBob = Math.sin(t * 3) * 6 * s;
@@ -595,25 +723,60 @@ const JellyfishRenderer = (() => {
           let ledAlpha = Math.min(1.0, alpha * 1.5);
           let ledSize = 4 * s; 
 
-          if (on && chaseOffset >= 0) {
-            let distance = j - chaseOffset;
-            if (distance < 0) distance += this.segmentsPerTentacle; 
-            if (distance < 2) { 
-              ledAlpha = 1.0 * brightnessFactor;
-              ledSize = 6 * s;
-            } else if (distance < 10) { 
-              ledAlpha = Math.max(0, (1.0 - (distance / 10))) * 1.0 * brightnessFactor;
-            } else { 
-              ledAlpha = 0.15 * brightnessFactor;
+          if (on && chaseOffset >= 0 && chaseOffset !== -2) {
+            // Per-effect chase behavior
+            if (fx === 25) { // Chase — single tight group of 2 LEDs, no fade trail, background dim
+              let distance = j - chaseOffset;
+              if (distance < 0) distance += this.segmentsPerTentacle;
+              if (distance < 2) {
+                ledAlpha = 1.0 * brightnessFactor;
+                ledSize = 6 * s;
+              } else {
+                ledAlpha = 0.06 * brightnessFactor;
+              }
+            } else if (fx === 28) { // Comet — bright head, long fading tail
+              let distance = j - chaseOffset;
+              if (distance < 0) distance += this.segmentsPerTentacle;
+              if (distance < 1) {
+                ledAlpha = 1.0 * brightnessFactor;
+                ledSize = 7 * s;
+              } else if (distance < 15) {
+                ledAlpha = Math.max(0, (1.0 - (distance / 15))) * 0.9 * brightnessFactor;
+                ledSize = (6 - distance * 0.2) * s;
+              } else {
+                ledAlpha = 0.03 * brightnessFactor;
+              }
+            } else if (fx === 76) { // Running — multiple evenly-spaced dots flowing as a wave
+              const spacing = 6; // space between lit dots
+              const wavePos = (chaseOffset + i * 2.5) % this.segmentsPerTentacle;
+              // Multiple lit points spaced evenly
+              let nearestDist = this.segmentsPerTentacle;
+              for (let dot = 0; dot < 4; dot++) {
+                const dotPos = (wavePos + dot * spacing) % this.segmentsPerTentacle;
+                let d = Math.abs(j - dotPos);
+                if (d > this.segmentsPerTentacle / 2) d = this.segmentsPerTentacle - d;
+                nearestDist = Math.min(nearestDist, d);
+              }
+              if (nearestDist < 1) {
+                ledAlpha = 1.0 * brightnessFactor;
+                ledSize = 5 * s;
+              } else if (nearestDist < 3) {
+                ledAlpha = Math.max(0.1, (1.0 - nearestDist / 3)) * 0.7 * brightnessFactor;
+              } else {
+                ledAlpha = 0.12 * brightnessFactor;
+              }
             }
-          } else {
+          } else if (on && fx === 32) {
+             // Sparkle background: near black so the vibrant sparks pop
+             ledAlpha = 0.04 * brightnessFactor;
+          } else if (!on || chaseOffset === -1) {
              ledAlpha = Math.min(1.0, alpha * (1 - depthPct * (on ? 0.4 : 0.8)) * 1.5);
           }
 
           let drawR = r, drawG = g, drawB = b;
           if (on) {
-             if (fx === 9 || fx === 11) { // Colorloop / Rainbow
-                const hue = (t * 50 + j * 5 + i * 15) % 360;
+             if (fx === 11) { // Rainbow — smooth wide gradient across all LEDs
+                const hue = (t * 30 + j * 8 + i * 20) % 360;
                 const C = 255;
                 const X = Math.round(C * (1 - Math.abs(((hue/60) % 2) - 1)));
                 if(hue < 60) { drawR=C; drawG=X; drawB=0; }
@@ -622,17 +785,21 @@ const JellyfishRenderer = (() => {
                 else if(hue < 240) { drawR=0; drawG=X; drawB=C; }
                 else if(hue < 300) { drawR=X; drawG=0; drawB=C; }
                 else { drawR=C; drawG=0; drawB=X; }
+             } else if (fx === 9) { // Colorloop — fast discrete color blocks shifting
+                const blockIdx = Math.floor((t * 8 + j * 0.6 + i * 3) % 6);
+                const blockColors = [[255,0,0],[255,255,0],[0,255,0],[0,255,255],[0,0,255],[255,0,255]];
+                [drawR, drawG, drawB] = blockColors[blockIdx];
              } else if (fx === 101) { // Pacifica
-                const pctP = (Math.sin(t*1.5 - depthPct*3 + i) + 1) / 2; // 0 to 1
+                const pctP = (Math.sin(t*1.5 - depthPct*3 + i) + 1) / 2;
                 drawR = Math.round(62*(1-pctP) + 0*pctP);
                 drawG = Math.round(229*(1-pctP) + 130*pctP);
                 drawB = Math.round(153*(1-pctP) + 200*pctP);
-             } else if (fx === 64) { // Plasmawave
+             } else if (fx === 64) { // Plasmawave — red and blue
                 const val = (Math.sin(t*2 - depthPct*5 + i*2) + 1)/2;
                 drawR = Math.round(255*val);
                 drawG = 0;
                 drawB = Math.round(255*(1-val));
-             } else if (fx === 72) { // Aurora
+             } else if (fx === 72) { // Aurora — green to purple
                 const hue = 120 + ((Math.sin(t + depthPct*2) + 1)/2) * 160; 
                 const C = 255;
                 const X = Math.round(C * (1 - Math.abs(((hue/60) % 2) - 1)));
@@ -640,23 +807,71 @@ const JellyfishRenderer = (() => {
                 else if(hue < 240) { drawR=0; drawG=X; drawB=C; }
                 else if(hue < 300) { drawR=X; drawG=0; drawB=C; }
                 else { drawR=C; drawG=0; drawB=X; }
-             } else if (fx === 45 || fx === 49) { // Twinkle / Dissolve
-                const rnd = Math.sin(j * 4321 + i * 123 + (t * (fx===45?2:8))); 
-                if (rnd > 0.95) {
-                   drawR = 255; drawG = 255; drawB = 255;
+             } else if (fx === 45) { // Twinkle — random isolated sparkles
+                const seed = Math.sin(j * 4321.7 + i * 123.4);
+                const twinklePhase = (seed * 1000 + t * 2.5) % 6.28;
+                const sparkle = Math.max(0, Math.sin(twinklePhase));
+                if (sparkle > 0.92) {
+                   drawR = Math.min(255, r + 180); drawG = Math.min(255, g + 180); drawB = Math.min(255, b + 180);
                    ledAlpha = 1.0 * brightnessFactor;
+                   ledSize = 5.5 * s;
+                } else if (sparkle > 0.7) {
+                   ledAlpha *= 0.8;
+                } else {
+                   ledAlpha *= 0.35;
+                }
+             } else if (fx === 49) { // Dissolve — random groups fade in/out
+                const groupId = Math.floor(j / 3) + i * 10;
+                const dissolvePhase = (Math.sin(groupId * 73.1 + t * 3) + 1) / 2;
+                ledAlpha *= dissolvePhase;
+                if (dissolvePhase > 0.85) {
+                   drawR = Math.min(255, r + 100); drawG = Math.min(255, g + 100); drawB = Math.min(255, b + 100);
                    ledSize = 5 * s;
                 }
-             } else if (fx === 3) { // Wipe
-                const wipeT = (t * 2) % 2; 
-                if (depthPct > wipeT) ledAlpha = 0;
-             } else if (fx === 15) { // Ripple
-                const rip = Math.sin(depthPct * 20 - t * 10);
-                if (rip > 0.8) {
-                    drawR = Math.min(255, drawR + 100);
-                    drawG = Math.min(255, drawG + 100);
-                    drawB = Math.min(255, drawB + 100);
-                    ledSize = 5 * s;
+             } else if (fx === 3) { // Wipe — color reveal sweeping down with smooth edge
+                const wipePos = ((t * 0.8) % 2.0);
+                const wipeFront = wipePos;
+                const edgeDist = depthPct - wipeFront;
+                if (edgeDist > 0.08) {
+                    ledAlpha = 0.03 * brightnessFactor;
+                } else if (edgeDist > -0.03) {
+                    // Bright leading edge
+                    drawR = 255; drawG = 255; drawB = 255;
+                    ledAlpha = 1.0 * brightnessFactor;
+                    ledSize = 6 * s;
+                } else {
+                    // Already wiped — show full color
+                    ledAlpha = alpha * (1 - depthPct * 0.3);
+                }
+             } else if (fx === 15) { // Ripple — radial expanding rings
+                const rippleCenter = ((t * 2.5) % 1.5) - 0.2;
+                const dist = Math.abs(depthPct - rippleCenter);
+                if (dist < 0.06) {
+                    drawR = Math.min(255, r + 160);
+                    drawG = Math.min(255, g + 160);
+                    drawB = Math.min(255, b + 160);
+                    ledAlpha = 1.0 * brightnessFactor;
+                    ledSize = 6 * s;
+                } else if (dist < 0.15) {
+                    const fade = 1.0 - ((dist - 0.06) / 0.09);
+                    drawR = Math.min(255, Math.round(r + 80 * fade));
+                    drawG = Math.min(255, Math.round(g + 80 * fade));
+                    drawB = Math.min(255, Math.round(b + 80 * fade));
+                    ledAlpha = alpha * (0.5 + 0.5 * fade);
+                    ledSize = (4 + 1.5 * fade) * s;
+                }
+             } else if (fx === 2) { // Breathe — gentle fade per LED (staggered)
+                const breathePhase = Math.sin(t * 1.2 - depthPct * 0.3 - i * 0.1);
+                const breatheFactor = 0.2 + 0.8 * ((breathePhase + 1) / 2);
+                drawR = Math.round(r * breatheFactor);
+                drawG = Math.round(g * breatheFactor);
+                drawB = Math.round(b * breatheFactor);
+                ledAlpha = alpha * breatheFactor;
+             } else if (fx === 28) { // Comet — bright head color shifts to white
+                let distance = j - chaseOffset;
+                if (distance < 0) distance += this.segmentsPerTentacle;
+                if (distance < 2) {
+                   drawR = 255; drawG = 255; drawB = 255;
                 }
              }
           }
@@ -1154,8 +1369,11 @@ const JellyfishRenderer = (() => {
 
       // --- Speech Bubble ---
       if (msgObj.alpha > 0) {
-        if (msgObj.timer > 0) msgObj.timer--;
-        else msgObj.alpha = Math.max(0, msgObj.alpha - 0.05);
+        if (Date.now() < msgObj.expires) {
+           // still active, keep alpha at 1.0 (or fade in)
+        } else {
+           msgObj.alpha = Math.max(0, msgObj.alpha - 0.05);
+        }
 
         ctx.globalAlpha = msgObj.alpha;
         
@@ -1237,7 +1455,7 @@ const JellyfishRenderer = (() => {
     requestAnimationFrame(frame);
   }
 
-  return { init: () => { window.addEventListener('resize', resize); resize(); requestAnimationFrame(frame); }, speak, setDrinking };
+  return { init: () => { window.addEventListener('resize', resize); resize(); requestAnimationFrame(frame); }, speak, setDrinking, setParty: (v) => jelly.setParty(v) };
 })();
 
 /* ── APIs ── */
@@ -1251,10 +1469,22 @@ const WeatherApi = (() => {
     'Snow': '<path d="M12 2v20M4.93 4.93l14.14 14.14M2 12h20M19.07 4.93L4.93 19.07M10 4l2-2 2 2M4 10l-2 2 2 2M20 10l2 2-2 2M10 20l2 2 2-2"></path>'
   };
 
-  async function fetchWeather(loc, key) {
-    if(!key || !loc) return Log.warn('Weather sync skipped: Missing Location or API Key');
+  async function fetchWeather(loc, key, isManual = false) {
+    if(!key) {
+       showToast("Please set OpenWeather API Key in System Tab!");
+       Log.err("Weather Error: API Key missing.");
+       return;
+    }
+    if(!loc) return Log.warn('Weather sync skipped: Missing Location');
+
+    // 1. Proactive feedback ONLY if NOT a manual user action (background automation)
+    if (!isManual) {
+       JellyfishRenderer.speak("Checking the sky... Updating weather data.");
+    }
+
     try {
       const s = Settings.load();
+      // ... (Thresholds logic same) ...
       const THRESHOLDS = [
         { min:35, col:hexToRgb(s.hc35), fx:s.fx35 !== undefined ? s.fx35 : 0, l:'High Heat' },
         { min:28, col:hexToRgb(s.hc28), fx:s.fx28 !== undefined ? s.fx28 : 0, l:'Warm' },
@@ -1264,7 +1494,13 @@ const WeatherApi = (() => {
       
       const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(loc)}&appid=${key}&units=metric`);
       const data = await res.json();
-      if(!res.ok) throw new Error(data.message);
+      if(!res.ok) {
+        showToast(`Sync Failed: ${data.message}`);
+        if (!isManual) JellyfishRenderer.speak("Hmm, I couldn't reach the weather API.");
+        return;
+      }
+      
+      document.getElementById('btn-widget-sync')?.classList.add('hidden');
       
       const t = data.main.temp, f = data.main.feels_like;
       const c = THRESHOLDS.find(x => f >= x.min) || THRESHOLDS[3];
@@ -1283,7 +1519,6 @@ const WeatherApi = (() => {
       
       const locAlias = data.name + (data.sys && data.sys.country ? ', ' + data.sys.country : '');
       if(el('wd-meta')) el('wd-meta').textContent = wMain + ' • ' + locAlias;
-      
       if(el('wd-status')) el('wd-status').textContent = c.l;
       if(el('wd-icon')) el('wd-icon').src = `https://openweathermap.org/img/wn/${iconCode}@2x.png`;
       if(el('weather-board')) el('weather-board').className = `weather-dashboard wd-mode-${modeStr}`;
@@ -1297,7 +1532,6 @@ const WeatherApi = (() => {
          el('wd-lmi-label').textContent = `Effect: ${fxName}`;
       }
 
-      // Update Global Mini-Widget
       if(el('gw-temp')) el('gw-temp').textContent = Math.round(t) + '°C';
       if(el('gw-feels')) el('gw-feels').textContent = 'Feels ' + Math.round(f) + '°C';
       if(el('gw-loc')) el('gw-loc').textContent = locAlias;
@@ -1306,12 +1540,21 @@ const WeatherApi = (() => {
 
       Log.info(`Weather: ${data.name} - ${c.l}`);
       
-      WledApi.sendState({ on:true, bri:100, seg:[{id:0, fx:c.fx, col:[c.col,[0,0,0],[0,0,0]]}], tt:20 });
+      const weatherCol = getEffectColors(c.fx, c.col);
+      WledApi.sendState({ on:true, bri:100, seg:[{id:0, fx:c.fx, col:weatherCol}], tt:20 });
       LampState.set(c.col, c.fx, 100, true);
-      _restPayload = { on:true, bri:100, seg:[{id:0, fx:c.fx, col:[c.col,[0,0,0],[0,0,0]]}], tt:20 };
       
-      // Character Speak
-      JellyfishRenderer.speak(`It feels like ${Math.round(f)}°C. Setting lights to ${c.l}.`);
+      // 2. Final Results
+      const desc = data.weather[0].description;
+      const finalMsg = `Looks like ${desc} in ${data.name}. It feels like ${Math.round(f)}°C. Setting lights to ${c.l}.`;
+      
+      // If was automated, give the "checking" message some time to breathe otherwise it blinks away too fast
+      if (!isManual) {
+         setTimeout(() => JellyfishRenderer.speak(finalMsg), 3000);
+      } else {
+         JellyfishRenderer.speak(finalMsg);
+      }
+      
       showToast(`Weather updated`);
 
     } catch (e) { Log.err('Weather Fetch: ' + e.message); }
@@ -1321,14 +1564,21 @@ const WeatherApi = (() => {
 
 /* ── Water Reminder ── */
 let _restPayload = null;
+let _hydrationSnapshot = null; // To store state before reminder
+
 function triggerWaterReminder() {
   const s = Settings.load();
   const durationMs = s.waterDuration * 1000;
   const fx = s.waterFx !== undefined ? s.waterFx : 15;
   const col = s.waterColor ? hexToRgb(s.waterColor) : [0, 120, 255];
+  const waterCol = getEffectColors(fx, col);
 
   Log.ok('Hydration sequence triggered.');
-  WledApi.sendState({ on:true, bri:255, seg:[{id:0, fx:fx, sx:120, ix:200, col:[col,[col[0],255,255],[200,200,255]]}], tt:5 });
+  
+  // Capture current state before flashing
+  _hydrationSnapshot = { ...LampState.get(), color: [...LampState.get().color] };
+
+  WledApi.sendState({ on:true, bri:255, seg:[{id:0, fx:fx, sx:120, ix:200, pal:0, col:waterCol}], tt:5 });
   LampState.set(col, fx, 255, true);
   
   JellyfishRenderer.setDrinking(true);
@@ -1336,23 +1586,22 @@ function triggerWaterReminder() {
 
   setTimeout(() => { 
     JellyfishRenderer.setDrinking(false);
-    const defaultFx = s.waterReturnFx !== undefined ? s.waterReturnFx : 0;
-
-    if(_restPayload && _restPayload.seg && _restPayload.seg[0]) {
-      const defaultPayload = JSON.parse(JSON.stringify(_restPayload));
-      defaultPayload.seg[0].fx = defaultFx;
-
-      const baseCol = Array.isArray(defaultPayload.seg[0].col?.[0]) ? defaultPayload.seg[0].col[0] : [93, 82, 240];
-      WledApi.sendState(defaultPayload); 
-      LampState.set(baseCol, defaultFx, defaultPayload.bri, defaultPayload.on);
-      Log.info('Hydration reminder ended. Applied default effect ID: ' + defaultFx);
+    JellyfishRenderer.speak(''); // Clear the reminder message immediately
+    
+    // Return to the state captured before the reminder
+    if (_hydrationSnapshot) {
+      const { color, fx: prevFx, bri, on } = _hydrationSnapshot;
+      const returnCol = getEffectColors(prevFx, color);
+      const returnPayload = { on, bri, seg:[{id:0, fx:prevFx, col:returnCol}], tt:8 };
+      
+      WledApi.sendState(returnPayload);
+      LampState.set(color, prevFx, bri, on);
+      Log.info(`Hydration reminder ended. Returning to FX ${prevFx}`);
+      _hydrationSnapshot = null;
     } else {
-      const curr = LampState.get();
-      const baseCol = Array.isArray(curr.col) ? curr.col : [93, 82, 240];
-      const fallbackPayload = { on: curr.on !== false, bri: curr.bri || 120, seg:[{id:0, fx:defaultFx, col:[baseCol,[0,0,0],[0,0,0]]}], tt:8 };
-      WledApi.sendState(fallbackPayload);
-      LampState.set(baseCol, defaultFx, fallbackPayload.bri, fallbackPayload.on);
-      Log.info('Hydration reminder ended. Applied fallback default effect ID: ' + defaultFx);
+       // Fallback
+       LampState.set([99,88,255], 0, 128, true);
+       WledApi.sendState({ on:true, bri:128, seg:[{id:0, fx:0, col:[[99,88,255],[0,0,0],[0,0,0]]}], tt:10 });
     }
   }, durationMs);
 }
@@ -1388,9 +1637,35 @@ const Scheduler = (() => {
 
 /* ── UI Binding ── */
 function hexToRgb(h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+function hueToRgb(hue) {
+  const h = ((hue % 360) + 360) % 360;
+  const C = 255;
+  const X = Math.round(C * (1 - Math.abs(((h/60) % 2) - 1)));
+  if(h < 60)  return [C, X, 0];
+  if(h < 120) return [X, C, 0];
+  if(h < 180) return [0, C, X];
+  if(h < 240) return [0, X, C];
+  if(h < 300) return [X, 0, C];
+  return [C, 0, X];
+}
+
+/**
+ * Returns the correct WLED col array for a given effect ID and user color.
+ * Effects with predefined palettes (Plasmawave, Pacifica, Aurora) override
+ * the user color so the WLED strip matches the jellyfish animation.
+ */
+function getEffectColors(fxId, userColor) {
+  const uc = userColor || [99, 88, 255];
+  switch (fxId) {
+    case 64:  return [[255, 0, 0], [0, 0, 255], [0, 0, 0]];          // Plasmawave — red + blue
+    case 101: return [[0, 200, 180], [62, 229, 153], [0, 80, 200]];  // Pacifica — ocean teal-green
+    case 72:  return [[0, 255, 100], [130, 0, 255], [0, 200, 180]];  // Aurora — green + purple
+    default:  return [uc, [0, 0, 0], [0, 0, 0]];                    // All others: user color
+  }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
-  const s = Settings.load();
+  let s = Settings.load();
   if (s.startupMode === 'rest') s.commMode = 'rest';
   else if (s.startupMode === 'mqtt') s.commMode = 'mqtt';
   
@@ -1424,6 +1699,7 @@ document.addEventListener('DOMContentLoaded', () => {
     el.addEventListener('click', () => {
       grid.querySelectorAll('.fx-item').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
+      handleLightingApply(); // Apply immediately on click
     });
     grid.appendChild(el);
   });
@@ -1432,7 +1708,28 @@ document.addEventListener('DOMContentLoaded', () => {
   ['brightness','speed','intensity'].forEach(k => {
     const el = document.getElementById('sl-'+k);
     const val = document.getElementById('val-'+k);
-    if(el && val) el.addEventListener('input', () => val.textContent=el.value);
+    if(el && val) el.addEventListener('input', () => {
+      val.textContent=el.value;
+      // Update brightness preset active states when slider moves
+      if (k === 'brightness') {
+        document.querySelectorAll('.bri-preset-btn').forEach(btn => {
+          btn.classList.toggle('active', parseInt(btn.dataset.bri) === parseInt(el.value));
+        });
+      }
+    });
+  });
+
+  // Brightness preset buttons
+  document.querySelectorAll('.bri-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const bri = parseInt(btn.dataset.bri);
+      const slider = document.getElementById('sl-brightness');
+      const valEl = document.getElementById('val-brightness');
+      if (slider) slider.value = bri;
+      if (valEl) valEl.textContent = bri;
+      document.querySelectorAll('.bri-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
   });
 
   function syncForms() {
@@ -1471,7 +1768,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   syncForms();
 
-  ['fx-35','fx-28','fx-22','fx-0','hc-35','hc-28','hc-22','hc-0','water-fx','water-color','water-default-fx','set-weather-interval','set-water-interval','set-water-duration'].forEach(id => {
+  ['set-weather-interval','set-water-interval','set-water-duration'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener('change', () => document.getElementById('btn-save-settings')?.click());
   });
@@ -1508,26 +1805,40 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('Lamp Off'); 
   });
   
-  document.getElementById('btn-apply-light')?.addEventListener('click', () => {
-    const fx = parseInt(document.querySelector('.fx-item.active')?.dataset.id || 0);
+  function handleLightingApply(showToastMsg = true) {
+    const activeItem = document.querySelector('.fx-item.active');
+    if (!activeItem) return;
+
+    const fx = parseInt(activeItem.dataset.id || 0);
     const rgb = hexToRgb(document.getElementById('color-picker').value);
     const b = parseInt(document.getElementById('sl-brightness').value);
     const sp = parseInt(document.getElementById('sl-speed').value);
     const ix = parseInt(document.getElementById('sl-intensity').value);
     
-    const payload = { on:true, bri:b, seg:[{id:0, fx, sx:sp, ix, col:[rgb,[0,0,0],[0,0,0]]}], tt:5 };
+    const col = getEffectColors(fx, rgb);
+    
+    const payload = { on:true, bri:b, seg:[{id:0, fx, sx:sp, ix, col}], tt:5 };
     WledApi.sendState(payload);
     LampState.set(rgb, fx, b, true);
     _restPayload = payload;
-    showToast('Applied Effect');
+    
+    if (showToastMsg) showToast('Applied Effect');
     Log.ok(`Applied FX ${fx} @ Bri ${b}`);
     JellyfishRenderer.speak("Ooh, pretty colors!");
-  });
+  }
+
+  document.getElementById('btn-apply-light')?.addEventListener('click', () => handleLightingApply(true));
 
   document.getElementById('btn-fetch-weather')?.addEventListener('click', () => {
     const liveLoc = document.getElementById('loc-input').value.trim();
     const liveKey = document.getElementById('sys-apikey-input') ? document.getElementById('sys-apikey-input').value.trim() : s.weatherApiKey;
-    WeatherApi.fetchWeather(liveLoc, liveKey);
+    WeatherApi.fetchWeather(liveLoc, liveKey, true);
+  });
+
+  document.getElementById('btn-widget-sync')?.addEventListener('click', (e) => {
+    const liveLoc = document.getElementById('loc-input').value.trim() || s.location;
+    const liveKey = document.getElementById('sys-apikey-input') ? document.getElementById('sys-apikey-input').value.trim() : s.weatherApiKey;
+    WeatherApi.fetchWeather(liveLoc, liveKey, true);
   });
   
   document.getElementById('preset-grid')?.addEventListener('click', (e) => {
@@ -1536,7 +1847,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const liveKey = document.getElementById('sys-apikey-input') ? document.getElementById('sys-apikey-input').value.trim() : s.weatherApiKey;
       const locInput = document.getElementById('loc-input');
       if (locInput) locInput.value = loc;
-      WeatherApi.fetchWeather(loc, liveKey);
+      WeatherApi.fetchWeather(loc, liveKey, true);
       showToast(`Teleported to ${loc}`);
     }
   });
@@ -1575,6 +1886,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-party-mode')?.addEventListener('click', () => {
     JellyfishRenderer.speak("RAVE MODE ACTIVATED! WOOOO!", 4000);
+    JellyfishRenderer.setParty(true);
     let count = 0;
     const colors = [[255,0,0], [0,255,0], [0,0,255], [255,255,0], [255,0,255], [0,255,255]];
     const iv = setInterval(() => {
@@ -1585,6 +1897,7 @@ document.addEventListener('DOMContentLoaded', () => {
        count++;
        if(count > 25) {
          clearInterval(iv);
+         JellyfishRenderer.setParty(false);
          setTimeout(() => {
              JellyfishRenderer.speak("Phew... I'm exhausted.", 5000);
              LampState.set([99,88,255], 0, 100, true);
@@ -1594,34 +1907,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 400);
   });
 
-  const restBypassModal = document.getElementById('rest-mode-modal');
-  const openRestBypassModal = () => {
-    if (restBypassModal) restBypassModal.classList.remove('hidden');
-  };
-  const closeRestBypassModal = () => {
-    if (restBypassModal) restBypassModal.classList.add('hidden');
-  };
 
-  document.getElementById('btn-unlock-rest-mode')?.addEventListener('click', openRestBypassModal);
-  document.getElementById('btn-close-rest-modal')?.addEventListener('click', closeRestBypassModal);
-  document.getElementById('btn-close-rest-modal-footer')?.addEventListener('click', closeRestBypassModal);
-
-  restBypassModal?.addEventListener('click', (e) => {
-    if (e.target === restBypassModal) closeRestBypassModal();
-  });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && restBypassModal && !restBypassModal.classList.contains('hidden')) {
-      closeRestBypassModal();
-    }
-  });
 
   document.getElementById('btn-reset-loc')?.addEventListener('click', () => {
     const defaultLoc = document.getElementById('sys-loc-input') ? document.getElementById('sys-loc-input').value.trim() : s.location;
     const locInput = document.getElementById('loc-input');
     if (locInput) locInput.value = defaultLoc;
     const liveKey = document.getElementById('sys-apikey-input') ? document.getElementById('sys-apikey-input').value.trim() : s.weatherApiKey;
-    WeatherApi.fetchWeather(defaultLoc, liveKey);
+    WeatherApi.fetchWeather(defaultLoc, liveKey, true);
   });
   
   document.getElementById('btn-trigger-water')?.addEventListener('click', triggerWaterReminder);
@@ -1647,7 +1940,6 @@ document.addEventListener('DOMContentLoaded', () => {
       
       if(document.getElementById('water-fx')) s.waterFx = parseInt(document.getElementById('water-fx').value) || 0;
       if(document.getElementById('water-color')) s.waterColor = document.getElementById('water-color').value;
-      if(document.getElementById('water-default-fx')) s.waterReturnFx = parseInt(document.getElementById('water-default-fx').value) || 0;
     }
     if (document.getElementById('sys-startup-mode')) s.startupMode = document.getElementById('sys-startup-mode').value;
     if (document.querySelector('input[name="comm-mode"]:checked')) {
@@ -1663,6 +1955,142 @@ document.addEventListener('DOMContentLoaded', () => {
     JellyfishRenderer.speak("Got it! Settings saved.");
     showToast('Configuration Saved');
     Log.info('System configuration updated');
+  });
+
+  // Weather Sync Dropdown & Color Apply Immediately
+  const weatherMapGroups = [
+    { id: '35', label: 'High Heat' },
+    { id: '28', label: 'Warm' },
+    { id: '22', label: 'Pleasant' },
+    { id: '0',  label: 'Cool' }
+  ];
+
+  weatherMapGroups.forEach(group => {
+    const fxSelect = document.getElementById(`fx-${group.id}`);
+    const colorPicker = document.getElementById(`hc-${group.id}`);
+
+    const applyIfCurrent = () => {
+      const currentLevel = document.getElementById('wd-status')?.textContent;
+      if (currentLevel === group.label) {
+        const fx = parseInt(fxSelect.value);
+        const col = hexToRgb(colorPicker.value);
+        const wCol = getEffectColors(fx, col);
+        
+        WledApi.sendState({ on:true, bri:100, seg:[{id:0, fx, col:wCol}], tt:10 });
+        LampState.set(col, fx, 100, true);
+        
+        // Update indicator UI
+        const badge = document.getElementById('wd-lmi-badge');
+        if (badge) {
+          badge.style.background = `rgb(${col.join(',')})`;
+          badge.style.boxShadow = `0 0 10px rgb(${col.join(',')})`;
+        }
+        const label = document.getElementById('wd-lmi-label');
+        if (label) {
+          const fxName = WLED_FX.find(x => x.id === fx)?.name || 'Solid';
+          label.textContent = `Effect: ${fxName}`;
+        }
+        Log.info(`Immediate Weather Apply: ${group.label} → FX ${fx}`);
+      }
+      
+      // Save changes immediately to memory
+      s[`fx${group.id}`] = parseInt(fxSelect.value);
+      s[`hc${group.id}`] = colorPicker.value;
+      Settings.save(s);
+    };
+
+    fxSelect?.addEventListener('change', applyIfCurrent);
+    colorPicker?.addEventListener('input', applyIfCurrent);
+  });
+
+  // Hydration Selector Save (No Immediate Preview overlay)
+  const waterFxSelect = document.getElementById('water-fx');
+  const waterColorPicker = document.getElementById('water-color');
+  if (waterFxSelect && waterColorPicker) {
+    const applyWaterSettings = () => {
+      s.waterFx = parseInt(waterFxSelect.value) || 0;
+      s.waterColor = waterColorPicker.value;
+      Settings.save(s);
+      
+      Log.info('Saved Hydration Setting: FX ' + s.waterFx);
+      // Wait for the trigger or interval to actually apply/preview it 
+      // so we don't accidentally overwrite the active Weather Sync state.
+    };
+    waterFxSelect.addEventListener('change', applyWaterSettings);
+    waterColorPicker.addEventListener('input', applyWaterSettings);
+  }
+
+  // --- Reset Effects to Default ---
+  document.getElementById('btn-reset-effects')?.addEventListener('click', () => {
+    s = Settings.resetEffects();
+    syncForms();
+    Scheduler.restart(s);
+    showToast('Effects & Intervals Reset to Default');
+    Log.info('Effects resetting to defaults');
+    
+    // Auto-fetch weather to immediate apply the restored default colors
+    document.getElementById('btn-fetch-weather')?.click();
+  });
+
+  // Payload Injector logic
+  const jsonInput = document.getElementById('pi-json-input');
+  
+  document.getElementById('btn-fill-red')?.addEventListener('click', () => {
+    jsonInput.value = '{"on": true, "seg": [{"col": [[255, 0, 0]]}]}';
+  });
+  document.getElementById('btn-fill-blink')?.addEventListener('click', () => {
+    jsonInput.value = '{"on": true, "seg": [{"fx": 1, "sx": 128}]}';
+  });
+  document.getElementById('btn-fill-sample')?.addEventListener('click', () => {
+    jsonInput.value = JSON.stringify({
+      on: true,
+      bri: 255,
+      tt: 10,
+      seg: [{
+        id: 0,
+        fx: 2,
+        sx: 128,
+        ix: 128,
+        col: [[99, 88, 255], [0, 0, 0], [0, 0, 0]]
+      }]
+    }, null, 2);
+  });
+
+  document.getElementById('btn-send-payload')?.addEventListener('click', () => {
+    const raw = jsonInput.value.trim();
+    if (!raw) return;
+    
+    try {
+      const p = JSON.parse(raw);
+      WledApi.sendState(p);
+      
+      // Synchronize Jellyfish Mascot with the injected payload
+      const curr = LampState.get();
+      const on = p.on !== undefined ? p.on : curr.on;
+      const bri = p.bri !== undefined ? p.bri : curr.bri;
+      let fx = curr.fx;
+      let col = curr.color;
+      
+      // Heuristic extraction from WLED JSON structure
+      if (p.seg && Array.isArray(p.seg) && p.seg[0]) {
+        const s0 = p.seg[0];
+        if (s0.fx !== undefined) fx = s0.fx;
+        if (s0.col && Array.isArray(s0.col) && s0.col[0]) col = s0.col[0];
+      } else {
+        if (p.fx !== undefined) fx = p.fx;
+        // Handle top-level 'col' if present (some API versions use this)
+        if (p.col && Array.isArray(p.col) && p.col[0]) col = p.col[0];
+      }
+
+      LampState.set(col, fx, bri, on);
+      JellyfishRenderer.speak("Manual payload override active!");
+      
+      Log.info('Raw payload injected & mascot synced');
+      showToast('Payload Sent!');
+    } catch (e) {
+      Log.err('Invalid JSON format');
+      showToast('Invalid JSON structure');
+    }
   });
 
   document.getElementById('btn-test-conn')?.addEventListener('click', async () => {
@@ -1686,11 +2114,22 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     
-    // Simulate initial awake if device responds initially
     if(ok) { LampState.set(undefined, undefined, undefined, true); JellyfishRenderer.speak("Connected to target!"); }
     else JellyfishRenderer.speak("I can't see the lamp...");
     
     Log[ok?'ok':'err'](ok?'Ping successful':'Ping failed. Device offline.');
+  });
+
+  // Info Modal Logic
+  const infoModal = document.getElementById('info-modal');
+  document.getElementById('btn-open-info')?.addEventListener('click', () => {
+    infoModal?.classList.remove('hidden');
+  });
+  [document.getElementById('btn-close-info'), document.getElementById('btn-info-ok')].forEach(btn => {
+    btn?.addEventListener('click', () => infoModal?.classList.add('hidden'));
+  });
+  infoModal?.addEventListener('click', (e) => {
+    if (e.target === infoModal) infoModal.classList.add('hidden');
   });
 
   // Init routines
@@ -1704,7 +2143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ConnStatus.set('warn');
     const ok = await WledApi.ping({ mode: startupMode, epoch: startupEpoch });
     if (!WledApi.isRequestCurrent(startupMode, startupEpoch)) return;
-    if (ok) LampState.set(null, null, null, true); // Assume on if connected for happy state
+    
     Log.info('Lumina System Boot Sequence Complete');
     JellyfishRenderer.speak("Hello there! I'm your Lumina companion.");
   }, 500);

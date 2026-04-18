@@ -40,6 +40,9 @@
              <span id="gw-feels">Feels --°C</span>
              <span class="gw-sep">•</span>
              <span id="gw-loc">No Data</span>
+             <button id="btn-widget-sync" class="btn-mini-sync" title="Sync Weather Now" aria-label="Sync Weather">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+             </button>
            </div>
         </div>
       </div>
@@ -56,7 +59,64 @@
           <button class="tab-btn" data-page="page-logs">Logs</button>
           <button class="tab-btn" data-page="page-lab">Lab</button>
         </nav>
+        <button class="btn-info-circle" id="btn-open-info" title="About Lumina">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        </button>
       </header>
+      
+      <!-- Info Modal (Integrated into Right Pane) -->
+      <div class="info-sidebar hidden" id="info-modal">
+        <div class="info-sidebar-header">
+          <h2>About Lumina</h2>
+          <button class="btn-close-circle" id="btn-close-info" title="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div class="info-sidebar-body">
+          <section class="info-section">
+            <div class="info-title-group">
+               <div class="info-line"></div>
+               <h3>What is Lumina?</h3>
+            </div>
+            <p>Lumina is a next-generation smart lamp controller designed specifically for the Jellyfish series by Team Hauers. It provides a real-time bridge between atmospheric conditions and your home's lighting aesthetics.</p>
+          </section>
+          
+          <section class="info-section mt-6">
+            <div class="info-title-group">
+               <div class="info-line"></div>
+               <h3>How it Works</h3>
+            </div>
+            <p>The system uses a WebSocket-based MQTT or REST interface to communicate with WLED-powered hardware. It features a physics-simulated mascot that visually reflects every state change of the physical lamp in real-time.</p>
+          </section>
+  
+          <section class="info-section mt-6">
+            <div class="info-title-group">
+               <div class="info-line"></div>
+               <h3>Tech Stack</h3>
+            </div>
+            <div class="tech-grid">
+              <span class="tech-tag">Paho MQTT</span>
+              <span class="tech-tag">WLED JSON API</span>
+              <span class="tech-tag">HTML5 Canvas</span>
+              <span class="tech-tag">Vanilla JS</span>
+            </div>
+          </section>
+  
+          <section class="info-section mt-6">
+            <div class="info-title-group">
+               <div class="info-line"></div>
+               <h3>Github Repo</h3>
+            </div>
+            <div class="github-repo-box">
+               <a href="https://github.com/ptrckslcd/lumina" target="_blank" class="github-ext-link">
+                 <svg class="gh-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                 <span class="gh-url-text">github.com/ptrckslcd/lumina</span>
+                 <svg class="gh-ext-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+               </a>
+            </div>
+          </section>
+        </div>
+      </div>
 
       <div class="control-content">
         
@@ -102,9 +162,16 @@
           <div class="section-group">
             <div class="section-header">
               <h2>Brightness</h2>
-              <span class="header-value" id="val-brightness">100</span>
+              <span class="header-value" id="val-brightness">128</span>
             </div>
-            <input type="range" class="flat-slider" id="sl-brightness" min="0" max="255" value="100" />
+            <input type="range" class="flat-slider" id="sl-brightness" min="0" max="255" value="128" />
+            <div class="brightness-presets">
+              <button class="bri-preset-btn" data-bri="0" title="0%">0%</button>
+              <button class="bri-preset-btn" data-bri="64" title="25%">25%</button>
+              <button class="bri-preset-btn active" data-bri="128" title="50%">50%</button>
+              <button class="bri-preset-btn" data-bri="191" title="75%">75%</button>
+              <button class="bri-preset-btn" data-bri="255" title="100%">100%</button>
+            </div>
             
             <div class="section-header mt-4">
               <h2>Pace</h2>
@@ -219,12 +286,7 @@
                   <input type="color" id="water-color" value="#0078ff" />
                 </div>
               </div>
-              <div class="input-row">
-                <label>Default Effect</label>
-                <div style="display: flex; gap: 8px;">
-                  <select id="water-default-fx" class="fx-select" style="width:100px"></select>
-                </div>
-              </div>
+
               <div class="input-row">
                 <label>Interval (min)</label>
                 <input type="number" id="set-water-interval" min="1" max="1440" value="60" />
@@ -235,6 +297,10 @@
               </div>
             </div>
             <button class="btn-clean block mt-4" id="btn-trigger-water">Trigger Reminder</button>
+          </div>
+
+          <div class="section-group" style="margin-top: 16px;">
+            <button class="btn-ghost block w-full" id="btn-reset-effects" style="color: var(--text-sec); border-color: var(--border);">Reset Effects & Intervals to Default</button>
           </div>
 
         </div>
@@ -317,11 +383,54 @@
 
             <div class="section-group mt-4">
               <div class="section-header">
-                <h2>Local REST Access</h2>
+                <h2>JSON Payload Injector</h2>
               </div>
-              <p class="helper-text">When hosted on HTTPS, browser security can block local HTTP device calls. Use this helper to view bypass steps.</p>
-              <button class="btn-solid block" id="btn-unlock-rest-mode">Unlock Local REST Mode (HTTPS Bypass)</button>
+              <p class="helper-text">Directly inject raw JSON states into the WLED hardware for debugging and advanced control.</p>
+              
+              <div class="payload-injector-grid">
+                <div class="pi-editor-pane">
+                  <div class="pi-quick-fills">
+                    <button class="btn-mini-fill" id="btn-fill-red" aria-label="Quick fill Red color payload">Turn On (Red)</button>
+                    <button class="btn-mini-fill" id="btn-fill-blink" aria-label="Quick fill Blink effect payload">Blink Effect</button>
+                    <button class="btn-mini-fill" id="btn-fill-sample" aria-label="Quick fill Full Sample payload">Full Sample</button>
+                  </div>
+                  <label for="pi-json-input" style="font-size: 11px; color: var(--text-sec); display: block;">Raw JSON Payload</label>
+                  <textarea id="pi-json-input" class="pi-code-area" placeholder='{"on": true, "bri": 255}' spellcheck="false" aria-label="JSON payload editor"></textarea>
+                  <button class="btn-solid block" id="btn-send-payload" aria-label="Send JSON payload to WLED">Send Payload</button>
+                </div>
+                
+                <div class="pi-cheat-sheet">
+                  <h4>WLED API Dictionary</h4>
+                  <div class="pi-dict">
+                    <div class="pi-dict-row">
+                      <span class="pi-badge">on</span>
+                      <span class="pi-desc">Boolean (true/false) to toggle power</span>
+                    </div>
+                    <div class="pi-dict-row">
+                      <span class="pi-badge">bri</span>
+                      <span class="pi-desc">Master brightness (0-255)</span>
+                    </div>
+                    <div class="pi-dict-row">
+                      <span class="pi-badge">fx</span>
+                      <span class="pi-desc">Effect ID (e.g., 1 for Blink)</span>
+                    </div>
+                    <div class="pi-dict-row">
+                      <span class="pi-badge">col</span>
+                      <span class="pi-desc">RGB nested array (e.g., [[255,0,0]])</span>
+                    </div>
+                    <div class="pi-dict-row">
+                      <span class="pi-badge">tt</span>
+                      <span class="pi-desc">Transition Time in 100ms units</span>
+                    </div>
+                    <div class="pi-dict-row">
+                      <span class="pi-badge">seg</span>
+                      <span class="pi-desc">Array for segment control</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+
           </div>
 
         <!-- =======================
@@ -438,40 +547,7 @@
 
       </div>
 
-      <div class="rest-modal-overlay hidden" id="rest-mode-modal" role="dialog" aria-modal="true" aria-labelledby="rest-mode-title">
-        <div class="rest-modal-card">
-          <div class="rest-modal-header">
-            <h3 id="rest-mode-title">Browser Mixed Content Block Detected</h3>
-            <button class="btn-ghost rest-modal-close" id="btn-close-rest-modal" aria-label="Close modal">Close</button>
-          </div>
-          <p class="rest-modal-subtext">Your app is served over HTTPS (for example on Vercel), but local WLED REST calls use HTTP. Most browsers block this by default as mixed content.</p>
-          <p class="rest-modal-note"><strong>When to use this:</strong> Use this only when accessing Lumina through a hosted/public URL (such as Vercel). If you are running on localhost/local network, this step is usually not required.</p>
 
-          <div class="rest-guide-grid">
-            <section class="rest-guide-column">
-              <h4>Desktop Guide</h4>
-              <ol>
-                <li>Click the <strong>View Site Information</strong> icon (lock or controls) beside the URL.</li>
-                <li>Open <strong>Site Settings</strong> and locate the <strong>Insecure Content</strong> permission.</li>
-                <li>Change it from <strong>Block</strong> to <strong>Allow</strong>, then refresh the page.</li>
-              </ol>
-            </section>
-
-            <section class="rest-guide-column">
-              <h4>Mobile Guide</h4>
-              <ol>
-                <li>Tap the browser site icon or menu near the address bar for site details.</li>
-                <li>Open <strong>Site Settings</strong> (or Permissions) and find <strong>Insecure Content</strong>.</li>
-                <li>Switch it to <strong>Allow</strong>, then reload the dashboard.</li>
-              </ol>
-            </section>
-          </div>
-
-          <div class="rest-modal-footer">
-            <button class="btn-clean" id="btn-close-rest-modal-footer">Close</button>
-          </div>
-        </div>
-      </div>
     </section>
 
   </main>
